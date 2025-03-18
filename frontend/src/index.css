@@ -1,0 +1,426 @@
+/* Import Google Font */
+@font-face {
+  font-family: 'Roboto';
+  src: url('/fonts/Roboto-Regular.woff2') format('woff2'),
+       url('/fonts/Roboto-Regular.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Roboto';
+  src: url('/fonts/Roboto-Regular.woff2') format('woff2'),
+       url('/fonts/Roboto-Regular.woff') format('woff');
+  font-weight: 500;
+  font-style: normal;
+}
+
+/** CSS Reset */
+/* 1. Use a more-intuitive box-sizing model */
+*, *::before, *::after {
+    box-sizing: border-box;
+  }
+  
+  /* 2. Remove default margin */
+  * {
+    margin: 0;
+  }
+  
+  body {
+    /* 3. Add accessible line-height */
+    line-height: 1.5;
+    /* 4. Add font family and Improve text rendering */
+    font-family: 'Roboto', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  
+  /* 5. Improve media defaults */
+  img, picture, video, canvas, svg {
+    display: block;
+    max-width: 100%;
+  }
+  
+  /* 6. Inherit fonts for form controls */
+  input, button, textarea, select {
+    font: inherit;
+  }
+  
+  /* 7. Avoid text overflows */
+  p, h1, h2, h3, h4, h5, h6 {
+    overflow-wrap: break-word;
+  }
+  
+  /* 8. Improve line wrapping */
+  p {
+    text-wrap: pretty;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    text-wrap: balance;
+  }
+  
+  /*
+    9. Create a root stacking context
+  */
+  #root, #__next {
+    isolation: isolate;
+  }
+
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+  }
+
+  input[type="number"] {
+      -moz-appearance: textfield; /* For Firefox */
+  }
+
+/** End CSS Reset */
+
+/** Color Variables */
+:root {
+  --background-color: rgba(43, 51, 55, 1);
+  --text-color: rgba(255, 255, 255, 1);
+  --heart-color: rgba(235, 46, 96, 1);
+  --heart-broken-color: rgba(66, 66, 66, 1);
+  --button-blue: rgba(90, 153, 212, 1);
+  --button-green: rgba(90, 212, 100, 1);
+  --button-red: rgba(235, 46, 96, 1);
+  --button-blue-shadow: rgba(90, 153, 212, 0.5);
+  --button-red-shadow: rgba(235, 46, 96, 0.5);
+  --button-green-shadow: rgba(90, 212, 100, 0.5);
+}
+
+/* General Styles */
+html, body {
+  width: 100%;
+  background-color: var(--background-color);
+}
+
+/* Game Status */
+#gameStatus {
+  color: var(--text-color);
+  font-size: 35px;
+}
+
+/* Room Styles */
+#room {
+  height: 100vh;
+  min-height: 100%;
+}
+
+#room #countdown {
+  font-size: 180px;
+}
+
+#room #rule, 
+#room #level {
+  font-size: 50px;
+}
+
+#room #heart {
+  color: var(--heart-color);
+  width: 100px;
+  height: 100px;
+}
+
+#room #heart-broken {
+  color: var(--heart-broken-color);
+  width: 100px;
+  height: 100px;
+}
+
+/* Room Message */
+.room-message-container {
+  margin-bottom: 20px;
+  color: var(--text-color);
+}
+
+#room-message {
+  font-size: 50px;
+}
+
+/* Door list items */
+#players {
+  display: flex;
+  flex-direction: column; /* Arrange items in a row */
+  gap: 10px; /* Optional: Add spacing between items */
+  list-style-type: none; /* Remove bullet points */
+  padding: 0; /* Remove default padding */
+}
+
+#room-players .list-item, #players .list-item {   
+  display: flex; 
+  align-items: center; 
+  gap: 10px; 
+  background-color: #222; 
+  padding: 10px; 
+  border-radius: 8px; 
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); 
+  text-align: center;
+  width: 200px;
+}
+
+#room-players .avatar, #players .avatar, #current-players .avatar, #next-players .avatar {
+  width: 50px;  
+  height: 50px; 
+  object-fit: cover; 
+}
+
+#room-players span, #players span, #current-players span, #next-players span {
+  color: #fff; 
+  font-size: 14px; 
+}
+
+#room-players, #current-players, #next-players {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr); /* 3 items per row */
+  gap: 10px; /* Adjust spacing */
+  list-style: none;
+  padding: 0;
+}
+
+#room-players .list-item, #current-players .list-item, #next-players .list-item{
+  display: flex; 
+  align-items: center; 
+  gap: 10px; 
+  background-color: #222; 
+  padding: 10px; 
+  border-radius: 8px; 
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); 
+  width: 150px;
+}
+
+/* Initial Hidden State */
+.roomConfigHidden {
+  transform: translateY(100%);
+  transition: transform 0.5s ease, opacity 0.5s ease;
+  min-height: 80px;
+}
+
+/* Visible State */
+.roomConfigVisible {
+  transform: translateY(0);
+  min-height: 200px;
+  transition: transform 0.5s ease, opacity 0.5s ease;
+}
+
+/* Hide Config */
+.hideConfig {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.showConfig {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+/* Pulse Button */
+.pulse-button,
+.pulse-button-red {
+  width: 200px;
+  height: 200px;
+  font-size: 1.3em;
+  font-weight: lighter;
+  font-family: 'Roboto', sans-serif;
+  text-transform: uppercase;
+  text-align: center;
+  line-height: 100px;
+  letter-spacing: -1px;
+  color: var(--text-color);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.pulse-button {
+  background: var(--button-blue);
+  box-shadow: 0 0 0 0 var(--button-blue-shadow);
+  animation: pulse-blue 1.5s infinite;
+}
+
+.pulse-button-red {
+  background: var(--button-red);
+  box-shadow: 0 0 0 0 var(--button-red-shadow);
+  animation: pulse-red 1.5s infinite;
+}
+
+.pulse-button:hover, 
+.pulse-button-red:hover {
+  animation: none;
+}
+
+.heart-broken {
+  /* animation: growAndFade 0.5s ease forwards; */
+}
+
+.heart-lost {
+  /* animation: shrinkAndFade 0.5s ease forwards; */
+}
+
+/* Animations */
+@keyframes shrinkAndFade {
+  0% {
+      transform: scale(1);
+      opacity: 1;
+  }
+  100% {
+      transform: scale(0);
+      opacity: 0;
+  }
+}
+
+@keyframes growAndFade {
+  0% {
+      transform: scale(0);
+      opacity: 0;
+  }
+  100% {
+      transform: scale(1);
+      opacity: 1;
+  }
+}
+
+@keyframes pulse-blue {
+  0% {
+      transform: scale(0.9);
+  }
+  70% {
+      transform: scale(1);
+      box-shadow: 0 0 0 50px var(--button-blue-shadow);
+  }
+  100% {
+      transform: scale(0.9);
+      box-shadow: 0 0 0 0 var(--button-blue-shadow);
+  }
+}
+
+@keyframes pulse-red {
+  0% {
+      transform: scale(0.9);
+  }
+  70% {
+      transform: scale(1);
+      box-shadow: 0 0 0 50px var(--button-red-shadow);
+  }
+  100% {
+      transform: scale(0.9);
+      box-shadow: 0 0 0 0 var(--button-red-shadow);
+  }
+}
+
+.circle::before, .circle::after {
+  position: absolute;
+  content: '';
+  border-radius: inherit;
+  background-image: conic-gradient(#00dbde, #fc00ff, #00dbde);
+  inset: 0px;
+  z-index: -1;
+  /* animation: rotate 3s linear infinite; */
+}
+
+.circle:hover::before, .circle:hover::after {
+  animation-play-state: paused;
+}
+
+.circle::after {
+  filter: blur(0.3rem);
+  opacity: 0.7;
+}
+
+@keyframes rotate {
+  to {
+      rotate: 360deg;
+  }
+}
+
+.helpInfo {
+  z-index: 9999;
+}
+
+.helpInfo svg {
+  cursor: pointer;
+  transition: color 0.3s ease;
+  color: #fff;
+}
+
+.helpInfo svg:hover {
+  color: var(--heart-color);
+}
+
+.light-red {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background-color: var(--button-red);
+  margin: 8px;
+}
+
+.light-green {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background-color: var(--button-green);
+  margin: 8px;
+}
+
+.red-light-animated {
+  animation-duration: 2s;
+  animation-name: flashing-red;
+}
+
+.green-light-animated {
+  animation-duration: 2s;
+  animation-name: flashing-green;
+}
+
+@keyframes flashing-red {
+  0% {
+    box-shadow: none;
+  }
+  50% {
+    box-shadow: 0px 0px 40px var(--button-red-shadow), 0px 0px 30px var(--button-red-shadow),
+      0px 0px 20px var(--button-red-shadow), 0px 0px 10px var(--button-red-shadow),
+      0px 0px 5px var(--button-red-shadow);
+  }
+  100% {
+    box-shadow: none;
+  }
+}
+
+@keyframes flashing-green {
+  0% {
+    box-shadow: none;
+  }
+  50% {
+    box-shadow: 0px 0px 40px var(--button-green-shadow), 0px 0px 30px var(--button-green-shadow),
+      0px 0px 20px var(--button-green-shadow), 0px 0px 10px var(--button-green-shadow),
+      0px 0px 5px var(--button-green-shadow);
+  }
+  100% {
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 1200px) {
+  #monitor {
+      flex-direction: column;
+  }
+
+  #monitor .col-8, #monitor .col-4 {
+      width: 100%;
+  }
+
+  #lists {
+      flex-direction: row;
+  }
+
+  #lists .col-6 {
+      flex: 0 0 100%;
+      width: 100%;
+      margin-bottom: 20px;
+  }
+}

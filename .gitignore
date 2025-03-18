@@ -1,0 +1,39 @@
+# Node modules
+backend/node_modules/
+frontend/node_modules/
+
+# Environment variables
+backend/.env
+frontend/.env
+
+# Build files
+backend/dist/
+frontend/dist/
+
+# Logs
+backend/npm-debug.log*
+frontend/npm-debug.log*
+
+# Editor and system files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# IDE files
+.vscode/
+.idea/
+
+# Cache files
+backend/.cache/
+frontend/.cache/
+backend/tmp/
+frontend/tmp/
+
+# Coverage reports
+backend/coverage/
+frontend/coverage/
+
+# Dependency lock files (optional, if you don't want to track them)
+# backend/package-lock.json
+# frontend/package-lock.json
