@@ -168,7 +168,7 @@ export default class Game {
 
     handleLightClickAction(lightId, whileColorWas) {
         let clickedLight = this.GetLightById(lightId)
-        console.log('TEST: clickedLight '+clickedLight+' whileColorWas: '+ whileColorWas)
+        //console.log('TEST: clickedLight '+clickedLight+' whileColorWas: '+ whileColorWas)
     
         this.handleGameSpecificLightAction(clickedLight, whileColorWas)
     }
@@ -310,8 +310,10 @@ export default class Game {
     }
 
     updateLifes() {
+        console.log('REMAINING LIFES', this.lifes)
         if (this.lifes === 0) {
             console.log('NO MORE LIFES')
+            this.levelFailed()
         }
     }
 

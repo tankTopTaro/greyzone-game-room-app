@@ -58,16 +58,30 @@ export default class DoubleGrid extends Game {
     }
 
     handleGameSpecificLightAction(clickedLight, whileColorWas) {
-        if (this.rule !== 1) return
-
-        if (this.room.lightGroups['mainFloor'].includes(clickedLight)) {
-            this.handleMainFloorClick(clickedLight, whileColorWas)
-        } else if (this.room.lightGroups['wallButtons'].includes(clickedLight)) {
-            this.handleWallButtonClick(clickedLights)
+        const ruleHandlers = {
+            1: () => {
+                if (this.room.lightGroups['mainFloor'].includes(clickedLight)) {
+                    this.handleMainFloorClick(clickedLight, whileColorWas)
+                } else if (this.room.lightGroups['wallButtons'].includes(clickedLight)) {
+                    this.handleWallButtonClick(clickedLights)
+                }
+            },
         }
+
+       if(!ruleHandlers[this.rule]) {
+            console.warn(`No handlers for this rule ${this.rule}`)
+       }
+
+        //console.log(`TEST from DoubleGrid: lightId: ${clickedLight}, whileColorWas: ${whileColorWas}`)
+        ruleHandlers[this.rule]()
     }
 
     handleMainFloorClick(clickedLight, whileColorWas) {
+        console.log('MAIN FLOOR CLICK')
+        console.log('whileColorWas:', whileColorWas)
+
+        if (Array.isArray(whileColorWas)) whileColorWas = whileColorWas.join(',')
+
         if (whileColorWas !== '255,0,0') return
         
         this.removeLife()
@@ -103,6 +117,7 @@ export default class DoubleGrid extends Game {
     }
 
     createShape(clickedLight) {
+        console.log('Create shape')
         this.shapes.push(new Shape(
             clickedLight.posX + clickedLight.width / 2,
             clickedLight.posY + clickedLight.height / 2,

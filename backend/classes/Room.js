@@ -47,7 +47,6 @@ export default class Room {
 
         this.config = {}
         this.type = 'MonkeyRun'
-        this.isInitialized = false
 
         this.init()
     }
@@ -68,7 +67,24 @@ export default class Room {
         await this.prepareLights()
         await this.measure()
         this.startServer()
-        this.isInitialized = true
+
+        this.setupWebSocketListeners()
+    }
+
+    setupWebSocketListeners() {
+        this.socket.onClientMessage('monitor', (message) => {
+            try {
+                const data = JSON.parse(message)
+                //console.log('Received message from monitor:', data)
+
+                if (data.type === 'lightClickAction') {
+                    //console.log(`Light ID: ${data.lightId} | WhileColorWas: ${data.whileColorWas}`)
+                    this.currentGameSession.handleLightClickAction(parseInt(data.lightId, 10), data.whileColorWas)
+                }
+            } catch (error) {
+                console.error('Error parsing WebSocket message:', error)
+            }
+        })
     }
 
     async prepareLights() {
@@ -240,7 +256,7 @@ export default class Room {
     async sendSocketInstructionForMonitor(light){
 
         let newInstructionString = light.newInstructionString
-        //Console.log('TEST Changing light id:',light.id,' to: ', newInstructionString)
+        //console.log('TEST Changing light id:',light.id,' to: ', newInstructionString)
         let response = await this.sendToSocketForMonitor(light)
         if(response === true){
             light.lastSocketInstructionString = newInstructionString
@@ -262,14 +278,12 @@ export default class Room {
     }
 
     async startGame(roomType, rule, level, players, team, book_room_until) {
-        if (!this.isInitialized) {
-            console.error('Room is not yet initialized.')
-            return
-        }
-
         const game = await this.gameManager.loadGame(roomType, rule, level, players, team, book_room_until, this)
 
-        if (game) game.start()
+        if (game) {
+            this.currentGameSession = game
+            game.start()
+        }
     }
 
     async notifyFacility() {

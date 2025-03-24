@@ -1,7 +1,9 @@
 import { WebSocketServer } from "ws"
+import { EventEmitter } from "events"
 
-export default class Socket {
+export default class Socket extends EventEmitter {
     constructor(port) {
+        super()
         this.port = port
         this.socket = null
         this.clientByName = {}
@@ -34,7 +36,8 @@ export default class Socket {
 
                         // Handle messages from this client
                         client.on('message', (message) => {
-                            console.log('Received message from '+data.clientname+' message:'+message.toString())
+                            //console.log('Received message from '+data.clientname+' message:'+message.toString())
+                            this.emit(clientName, message.toString())
                         })
 
                         // Handle disconnections
@@ -74,7 +77,7 @@ export default class Socket {
         }
     }
 
-    getConnectedclientnames() {
-        return Object.keys(this.clientByName)
+    onClientMessage(clientname, callback) {
+        this.on(clientname, callback)
     }
 }
