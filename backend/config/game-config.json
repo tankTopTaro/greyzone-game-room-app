@@ -1,0 +1,8 @@
+{
+    "roomType": "doubleGrid",
+    "hostname": "gra-1.local",
+    "gameRules": [1, 2, 3],
+    "gameLevels": [1, 2, 3],
+    "prepareLights": "/lights-config.json",
+    "prepareShapes": "/shapes-config.json"
+}

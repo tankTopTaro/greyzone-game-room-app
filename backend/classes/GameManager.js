@@ -22,7 +22,16 @@ export default class GameManager {
 
             const { default: GameClass } = await import(`../games/${roomType}.js`)
 
-            return new GameClass(rule, level, players, team, book_room_until, this.env, roomInstance)
+            const gameInstance = new GameClass(rule, level, players, team, book_room_until, this.env, roomInstance)
+
+            const result = await gameInstance.init()
+
+            if (result !== true) {
+                console.log('Game failed to initialize properly')
+                return null
+            }
+
+            return gameInstance
         } catch (error) {
             console.error(error)
             return null

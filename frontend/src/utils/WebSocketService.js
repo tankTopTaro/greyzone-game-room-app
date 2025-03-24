@@ -1,7 +1,7 @@
 class WebSocketService {
-    constructor (url, hostname) {
+    constructor (url, clientname) {
         this.url = url
-        this.hostname = hostname
+        this.clientname = clientname
         this.socket = null
         this.listeners = []
         this.reconnectInterval = 5000
@@ -18,8 +18,8 @@ class WebSocketService {
             this.socket.onopen = () => {
                 console.log(`Connected to WebSocket at ${this.url}`)
 
-                // send initial message to register hostname
-                this.send({ hostname: this.hostname })
+                // send initial message to register clientname
+                this.send({ clientname: this.clientname })
             }
 
             this.socket.onmessage = (event) => {
@@ -44,6 +44,7 @@ class WebSocketService {
 
     send (data) {
         if (this.isConnected()) {
+            console.log('Sending message to socket')
             this.socket.send(JSON.stringify(data))
         } else {
             console.warn('WebSocket is not connected. Message not sent.')

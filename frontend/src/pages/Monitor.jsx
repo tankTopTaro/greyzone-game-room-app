@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import axios from 'axios'
 import WebSocketService from "../utils/WebSocketService.js"
 
-const MONITOR_WS_URL = 'ws://localhost:8084'
+const WS_URL = 'ws://localhost:8081'
+const CLIENT = 'monitor'
 
 const Monitor = () => {
     const [countdown, setCountdown] = useState("00:00");
@@ -20,22 +21,29 @@ const Monitor = () => {
 
     const [message, setMessage] = useState('Waiting for messagess..')
 
-    const wsService = new WebSocketService(MONITOR_WS_URL)
+    const wsService = useRef(null)
 
     useEffect(() => {
-        if (!wsService.isConnected()) {
-            wsService.connect()
+      if (!wsService.current) {
+        wsService.current = new WebSocketService(WS_URL, CLIENT)
+        wsService.current.connect()
+      }
+
+      const handleWebSocketMessage = (data) => {
+        console.log('Received WebSocket message:', data)
+      }
+
+      wsService.current.addListener(handleWebSocketMessage)
+
+      wsService.current.send({ type: 'subscribe' })
+
+      return () => {
+        if (wsService.current) {
+          wsService.current.removeListener(handleWebSocketMessage)
+          wsService.current.close()
+          wsService.current = null
         }
-
-        wsService.addListener((data) => {
-            console.log('Received WebSocket message:', data)
-
-            setMessage(data || 'No message received')
-        })
-
-        wsService.send({
-            type: 'subscribe'
-        })
+      }
     }, [])
 
   useEffect(() => {
@@ -128,7 +136,11 @@ const Monitor = () => {
   }
 
   const reportLightClickAction = (light) => {
-    axios.get(`http://localhost:3002/game/lightClickAction?lightId=${light.id}&whileColorWas=${light.color}`)
+    wsService.current.send({
+      type: 'lightClickAction', 
+      lightId: light.id,
+      whileColorWas: light.color
+    })
   }
 
   const drawRoom = (ctx) => {
@@ -187,6 +199,7 @@ const Monitor = () => {
             ref={canvasRef} 
             id="canvas1" 
             className="row justify-content-center mb-4" 
+            onClick={handleCanvasClick}
             style={{ width: "100%" }}>
         </canvas>
         

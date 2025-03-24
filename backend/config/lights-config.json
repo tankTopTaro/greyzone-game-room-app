@@ -1,0 +1,19 @@
+{
+    "doubleGrid": [
+        { "x": 130, "y": 130, "shape": "rectangle", "type": "ledSwitch", "w": 960, "h": 480, "cols": 25, "rows": 25, "spacingX": 5, "spacingY": 5, "label": "mainFloor", "active": true },
+        
+        { "x": 255, "y": 70, "shape": "rectangle", "type": "ledSwitch", "w": 960, "h": 100, "cols": 15, "rows": 15, "spacingX": 200, "spacingY": 40, "label": "wallButtons", "active": false },
+        { "x": 255, "y": 640, "shape": "rectangle", "type": "ledSwitch", "w": 960, "h": 100, "cols": 15, "rows": 15, "spacingX": 200, "spacingY": 40, "label": "wallButtons", "active": false },
+        { "x": 70, "y": 240, "shape": "rectangle", "type": "ledSwitch", "w": 100, "h": 500, "cols": 15, "rows": 15, "spacingX": 40, "spacingY": 200, "label": "wallButtons", "active": false },
+        { "x": 1120, "y": 240, "shape": "rectangle", "type": "ledSwitch", "w": 100, "h": 500, "cols": 15, "rows": 15, "spacingX": 40, "spacingY": 200, "label": "wallButtons", "active": false },
+        
+        { "x": 250, "y": 30, "shape": "rectangle", "type": "screen", "w": 960, "h": 100, "cols": 25, "rows": 25, "spacingX": 190, "spacingY": 40, "label": "wallScreens", "active": false },
+        { "x": 250, "y": 670, "shape": "rectangle", "type": "screen", "w": 960, "h": 100, "cols": 25, "rows": 25, "spacingX": 190, "spacingY": 40, "label": "wallScreens", "active": false },
+        { "x": 30, "y": 235, "shape": "rectangle", "type": "screen", "w": 100, "h": 500, "cols": 25, "rows": 25, "spacingX": 40, "spacingY": 190, "label": "wallScreens", "active": false },
+        { "x": 1150, "y": 235, "shape": "rectangle", "type": "screen", "w": 100, "h": 500, "cols": 25, "rows": 25, "spacingX": 40, "spacingY": 190, "label": "wallScreens", "active": false }
+    ],
+
+    "basketball": [
+        { "x": 130, "y": 130, "shape": "rectangle", "type": "ledSwitch", "w": 960, "h": 100, "cols": 80, "rows": 80, "spacingX": 90, "spacingY": 5, "label": "wallButtons", "active": false }
+    ]
+}

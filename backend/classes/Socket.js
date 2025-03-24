@@ -3,43 +3,43 @@ import { WebSocketServer } from "ws"
 export default class Socket {
     constructor(port) {
         this.port = port
+        this.socket = null
         this.clientByName = {}
         this.init()
     }
 
     init() {
-        this.socket = new WebSocketServer({ port: this.port, host: 'localhost' })
+        const host = process.env.HOSTNAME || '0.0.0.0'
+        this.socket = new WebSocketServer({ port: this.port, host: host })
 
         this.socket.on('connection', (client, request) => {
             client.clientIp = request.connection.remoteAddress
             client.userAgent = request.headers['user-agent']
 
-            // Expect the first message to contain the hostname
+            // Expect the first message to contain the clientname
             client.once('message', (message) => {
                 try {
                     const data = JSON.parse(message.toString())
 
-                    if(data.hostname) {
-                        const hostname = data.hostname
+                    if(data.clientname) {
+                        const clientName = data.clientname
 
-                        if (!this.clientByName[hostname]) {
-                            this.clientByName[hostname] = new Set()
+                        if (!this.clientByName[clientName]) {
+                            this.clientByName[clientName] = new Set()
                         }
 
-                        this.clientByName[hostname].add(client)
+                        this.clientByName[clientName].add(client)
 
-                        this.updateClientData()
-
-                        console.log(`Client registered under hostname: ${hostname}`)
+                        console.log(`Client registered under name: ${clientName}`)
 
                         // Handle messages from this client
                         client.on('message', (message) => {
-                            this.handleClientMessage(message)
+                            console.log('Received message from '+data.clientname+' message:'+message.toString())
                         })
 
                         // Handle disconnections
                         client.on('close', () => {
-                            this.handleClientDisconnect(hostname, client)
+                            this.handleClientDisconnect(clientName, client)
                         })
                     }
                 } catch (error) {
@@ -51,46 +51,30 @@ export default class Socket {
         console.log('WebSocket Server running on port ' + this.port)
     }
 
-    broadcastMessage(hostname, message) {
-        if (this.clientByName[hostname]) {
-            this.clientByName[hostname].forEach(client => {
+    broadcastMessage(clientname, message) {
+        if (this.clientByName[clientname]) {
+            this.clientByName[clientname].forEach(client => {
                 if (client.readyState === 1) {
                     client.send(JSON.stringify(message))
                 }
             })
-        } else {
-            console.log(`No clients connected under hostname: ${hostname}`)
         }
     }
 
-    handleClientMessage(message) {
-        try {
-            const data = JSON.parse(message.toString())
-        } catch (error) {
-            console.error('Invalid message format', error)
-        }
-    }
-
-    handleClientDisconnect(hostname, client) {
-        console.log(`Client from ${hostname} disconnected.`)
+    handleClientDisconnect(clientname, client) {
+        console.log(`Client from ${clientname} disconnected.`)
     
-        if (this.clientByName[hostname]) {
-            this.clientByName[hostname].delete(client)
+        if (this.clientByName[clientname]) {
+            this.clientByName[clientname].delete(client)
             
-            if (this.clientByName[hostname].size === 0) {
-                delete this.clientByName[hostname] // Fully remove hostname entry
-                console.log(`All clients from ${hostname} are disconnected.`)
+            if (this.clientByName[clientname].size === 0) {
+                delete this.clientByName[clientname] // Fully remove clientname entry
+                console.log(`All clients from ${clientname} are disconnected.`)
             }
         }
-    
-        this.updateClientData() // Ensure updateClientData runs
     }
 
-    updateClientData() {
-        console.log('updateClientData')
-    }
-
-    getConnectedHostnames() {
+    getConnectedclientnames() {
         return Object.keys(this.clientByName)
     }
 }
