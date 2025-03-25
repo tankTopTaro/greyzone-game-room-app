@@ -13,6 +13,7 @@ import Light from './Light.js'
 import startGameSessionRoute from '../routes/startGameSession.js'
 import gamesListRoute from '../routes/gamesList.js'
 import toggleRoomRoute from '../routes/toggleRoom.js'
+import gameAudioRoute from '../routes/gameAudio.js'
 import axios from 'axios'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -31,7 +32,6 @@ export default class Room {
         this.enabled = true // Enabling/Disabling the Room
         this.isFree = true  
         this.currentGameSession = undefined
-        this.waitingGameSession = undefined
 
         this.width
         this.height
@@ -72,19 +72,19 @@ export default class Room {
     }
 
     setupWebSocketListeners() {
-        this.socket.onClientMessage('monitor', (message) => {
-            try {
-                const data = JSON.parse(message)
-                //console.log('Received message from monitor:', data)
+      this.socket.onClientMessage('monitor', (message) => {
+         try {
+               const data = JSON.parse(message)
+               //console.log('Received message from monitor:', data)
 
-                if (data.type === 'lightClickAction') {
-                    //console.log(`Light ID: ${data.lightId} | WhileColorWas: ${data.whileColorWas}`)
-                    this.currentGameSession.handleLightClickAction(parseInt(data.lightId, 10), data.whileColorWas)
-                }
-            } catch (error) {
-                console.error('Error parsing WebSocket message:', error)
-            }
-        })
+               if (data.type === 'lightClickAction') {
+                  //console.log(`Light ID: ${data.lightId} | WhileColorWas: ${data.whileColorWas}`)
+                  this.currentGameSession.handleLightClickAction(parseInt(data.lightId, 10), data.whileColorWas)
+               }
+         } catch (error) {
+               console.error('Error parsing WebSocket message:', error)
+         }
+      })
     }
 
     async prepareLights() {
@@ -165,6 +165,7 @@ export default class Room {
         this.server.use(express.json())
         this.server.use(cors())
         this.server.use(express.static(path.join(__dirname, '../../frontend/dist')))
+        this.server.use(express.static(path.join(__dirname, '../assets')))
 
         // API routes
         this.server.use((req, res, next) => {
@@ -178,13 +179,11 @@ export default class Room {
         this.server.use('/api/start-game-session', startGameSessionRoute)
         this.server.use('/api/games-list', gamesListRoute)
         this.server.use('/api/toggle-room', toggleRoomRoute)
+        this.server.use('/api/game-audio', gameAudioRoute)
         this.server.use('/api/room-status', (req, res) => { res.json({enabled: this.enabled})})
         this.server.get('/api/health', (req, res) => { res.json({status: 'ok', hostname: process.env.HOSTNAME}) }); 
 
         // Frontend routes
-        this.server.get('/game/request', async (req, res) => {
-
-        })
         this.server.get('/get/roomData', (req, res) => {
             res.setHeader('Content-Type', 'application/json')
             res.json({
@@ -273,17 +272,15 @@ export default class Room {
 
     async sendToSocketForMonitor(light){
         let message = {'type':'updateLight','lightId':light.id,'color':light.color,'onClick':light.onClick}
-        this.socket.broadcastMessage('monitor', JSON.stringify(message))
+        this.socket.broadcastMessage('monitor', message)
         return true
     }
 
     async startGame(roomType, rule, level, players, team, book_room_until) {
-        const game = await this.gameManager.loadGame(roomType, rule, level, players, team, book_room_until, this)
-
-        if (game) {
-            this.currentGameSession = game
-            game.start()
-        }
+        console.log('startGame request: ', { roomType, rule, level, players, team, book_room_until })
+        if(this.isFree) {
+            this.currentGameSession = await this.gameManager.loadGame(roomType, rule, level, players, team, book_room_until, this)
+         }
     }
 
     async notifyFacility() {

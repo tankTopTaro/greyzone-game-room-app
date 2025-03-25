@@ -44,7 +44,7 @@ class WebSocketService {
 
     send (data) {
         if (this.isConnected()) {
-            console.log('Sending message to socket')
+            //console.log('Sending message to socket')
             this.socket.send(JSON.stringify(data))
         } else {
             console.warn('WebSocket is not connected. Message not sent.')

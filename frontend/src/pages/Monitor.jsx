@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable no-unused-vars */
 import { useState, useEffect, useRef } from "react";
 import axios from 'axios'
 import WebSocketService from "../utils/WebSocketService.js"
@@ -13,15 +15,203 @@ const Monitor = () => {
     const [currentPlayers, setCurrentPlayers] = useState([]);
     const [nextPlayers, setNextPlayers] = useState([]);
 
+    const wsService = useRef(null)
+
     const canvasRef = useRef(null)
+    const MAX_POINTS = 10
+    const REMOVE_INTERVAL = 1000
+    const [clickPoints, setClickPoints] = useState([])
     const [room, setRoom] = useState(null)
     const [lights, setLights] = useState([])
     const [scale, setScale] = useState(1)
+
+    const [lightsAreDrawn, setLightsAreDrawn] = useState(false)
     const bufferedLightUpdates = useRef([])
 
-    const [message, setMessage] = useState('Waiting for messagess..')
+    const audioCache = useRef(new Map())
 
-    const wsService = useRef(null)
+    const preloadAudio = async (audioName) => {
+      if (audioCache.current.has(audioName)) return   // Already cached
+
+      try {
+         const response = await axios.get(`/api/game-audio/${audioName}`)
+
+         if (response.status === 200) {
+            const data = response.data
+            const audio = new Audio(data.url)
+
+            audio.preload = 'auto'
+            audioCache.current.set(audioName, audio)
+         }
+      } catch (error) {
+         console.error(`Failed to preload ${audioName}:`, error)
+      }
+    }
+
+    const playAudio = async (audioName) => {
+      if (!audioCache.current.has(audioName)) {
+         console.warn(`Audio not preloaded. Preloading ${audioName} now...`)
+         await preloadAudio(audioName)
+      }
+
+      return new Promise((resolve, reject) => {
+         const audio = audioCache.current.get(audioName)
+
+         if (!audio) {
+            reject(new Error(`Audio not found: ${audioName}`))
+            return
+         }
+
+         const clone = audio.cloneNode()
+         clone.muted = true
+         clone.play()
+            .then(() => {
+               clone.muted = false
+               resolve()
+            })
+            .catch((err) => {
+               console.error(`Autoplay failed: ${audioName}`, err)
+               reject(err)
+            })
+      })
+    }
+
+    const handleCanvasClick = (ev) => {
+      const canvas = canvasRef.current
+      const ctx = canvas.getContext('2d')
+
+      const x = (event.clientX - canvas.getBoundingClientRect().left) * (canvas.width / canvas.offsetWidth);
+      const y = (event.clientY - canvas.getBoundingClientRect().top) * (canvas.height / canvas.offsetHeight);
+      const xScaled = x / scale;
+      const yScaled = y / scale;
+
+      setClickPoints((prev) => {
+         const newPoints = [...prev, { x, y }]
+         return newPoints.length > MAX_POINTS ? newPoints.slice(-MAX_POINTS) : newPoints;
+      })
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x, y, 10, 0, 2 * Math.PI);
+      ctx.fillStyle = "rgba(255, 255, 0, 0.6)";
+      ctx.fill();
+      ctx.closePath();
+      ctx.restore();
+
+      let clickedLight = null;
+      for (let i = lights.length - 1; i >= 0; i--) {
+        const light = lights[i];
+        if (
+          light.shape === "rectangle" &&
+          xScaled >= light.posX &&
+          xScaled <= light.posX + light.width &&
+          yScaled >= light.posY &&
+          yScaled <= light.posY + light.height
+        ) {
+          clickedLight = light;
+          break;
+        }
+      }
+
+      if (clickedLight) {
+          if (clickedLight.onClick === "ignore") {
+              console.log("Click ignored", clickedLight.color);
+          } else {
+              // console.log(`Click sent (whileColorWas: ${clickedLight.color}, whileOnClickWas: ${clickedLight.onClick})`);
+              reportLightClickAction(clickedLight);
+          }
+      }
+    }
+
+    const reportLightClickAction = (light) => {
+      wsService.current.send({
+        type: 'lightClickAction', 
+        lightId: light.id,
+        whileColorWas: light.color
+      })
+    }
+
+    const drawRoom = (ctx) => {
+      if (!room) return
+
+      const canvas = canvasRef.current
+      canvas.width = window.innerWidth;
+      setScale(canvas.width / room.width);
+      canvas.height = room.height * scale;
+
+      ctx.fillStyle = "rgb(43, 51, 55)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      lights.forEach((light) => {
+        if (!light.color) {
+          light.color = [0, 0, 0];
+          light.onClick = "ignore";
+        }
+        drawLight(ctx, light);
+      });
+
+      clickPoints.forEach(({ x, y }) => {
+         ctx.beginPath();
+         ctx.arc(x, y, 10, 0, 2 * Math.PI);
+         ctx.fillStyle = "rgba(255, 255, 0, 0.6)";
+         ctx.fill();
+         ctx.closePath();
+       });
+    }
+
+    const drawLight = (ctx, light) => {
+      if (light.type === "ledSwitch") {
+        ctx.fillStyle = `rgb(${light.color[0]}, ${light.color[1]}, ${light.color[2]})`;
+        ctx.fillRect(light.posX * scale, light.posY * scale, light.width * scale, light.height * scale);
+      } else if (light.type === "screen") {
+        ctx.fillStyle = "rgb(0, 0, 0)";
+        ctx.fillRect(light.posX * scale, light.posY * scale, light.width * scale, light.height * scale);
+        ctx.font = "22px Arial";
+        ctx.fillStyle = "white";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const text = light.color.filter((c) => c !== 0).join(",");
+        ctx.fillText(text, light.posX * scale + (light.width * scale) / 2, light.posY * scale + (light.height * scale) / 2);
+      }
+    }
+
+    const applyBufferedLightUpdates = () => {
+      const ctx = canvasRef.current.getContext("2d");
+      bufferedLightUpdates.current.forEach((lightUpdate) => {
+        const updatedLights = lights.map((light) =>
+          light.id === lightUpdate.lightId ? { ...light, color: lightUpdate.color } : light
+        );
+        setLights(updatedLights);
+        drawLight(ctx, updatedLights.find((l) => l.id === lightUpdate.lightId));
+      });
+      bufferedLightUpdates.current = [];
+    }
+
+    // WebSocket Types Methods
+    const handleUpdateLight = (data) => {
+      let light = data;
+            
+      if (!lightsAreDrawn) {
+         bufferedLightUpdates.current.push(light);
+         return;
+      }
+
+      setLights((prevLights) => {
+         if (!prevLights[light.lightId]) {
+            console.warn(`Light ID ${light.lightId} does not exist in lights array`, prevLights);
+            return prevLights; // Prevents modifying an undefined index
+         }
+
+         const updatedLights = [...prevLights]; // Create a new array
+         updatedLights[light.lightId] = {
+            ...updatedLights[light.lightId],
+            color: light.color,
+            onClick: light.onClick,
+         };
+
+         return updatedLights;
+      });
+    }
 
     useEffect(() => {
       document.title = 'GRA | Monitor'
@@ -32,7 +222,50 @@ const Monitor = () => {
       }
 
       const handleWebSocketMessage = (data) => {
-        console.log('Received WebSocket message:', data)
+        const messageHandlers = {
+            'colorNames': () => {
+               console.log(data)
+               playAudio(data['cache-audio-file-and-play'])
+            },
+            'colorNamesEnd': () => {
+               console.log(data)
+               wsService.current.send({
+                  type: 'colorNamesEnd'
+               })
+            },
+            'levelCompleted': () => {
+               console.log(data.message)
+               playAudio(data['cache-audio-file-and-play'])
+            },
+            'levelFailed': () => {
+               console.log(data.message)
+               playAudio(data['cache-audio-file-and-play'])
+            },
+            'newLevelStarts': () => {
+               setCountdown(data.countdown)
+               setLifes(data.lifes)
+               setRoomInfo(`${data.roomType} | Rule ${data.rule} Level ${data.level}`)
+            },
+            'offerNextLevel': () => console.log(data.message),
+            'offerSameLevel': () => console.log(data.message),
+            'playerSuccess': () => {
+               playAudio(data['cache-audio-file-and-play'])
+            },
+            'playerFailed': () => console.log('playerFailed'),
+            'timeIsUp': () => console.log(data.message),
+            'updateCountdown': () => {
+               setCountdown(data.countdown)
+            },
+            'updateLifes': () => {
+               setLifes(data.lifes)
+               playAudio(data['cache-audio-file-and-play'])
+            },
+            'updateLight': () => handleUpdateLight(data),
+        }
+
+        if (!messageHandlers[data.type]) {console.warn(`No handler for this message type ${data.type}`)}
+
+         messageHandlers[data.type]()
       }
 
       wsService.current.addListener(handleWebSocketMessage)
@@ -91,103 +324,13 @@ const Monitor = () => {
       }
     }, [room, lights])
 
-    const handleCanvasClick = (ev) => {
-      const canvas = canvasRef.current
-      const ctx = canvas.getContext('2d')
+    useEffect(() => {
+      const interval = setInterval(() => {
+         setClickPoints((prev) => prev.slice(1))
+      }, REMOVE_INTERVAL)
 
-      const x = (event.clientX - canvas.getBoundingClientRect().left) * (canvas.width / canvas.offsetWidth);
-      const y = (event.clientY - canvas.getBoundingClientRect().top) * (canvas.height / canvas.offsetHeight);
-      const xScaled = x / scale;
-      const yScaled = y / scale;
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(x, y, 10, 0, 2 * Math.PI);
-      ctx.fillStyle = "rgba(255, 255, 0, 0.6)";
-      ctx.fill();
-      ctx.closePath();
-      ctx.restore();
-
-      let clickedLight = null;
-      for (let i = lights.length - 1; i >= 0; i--) {
-        const light = lights[i];
-        if (
-          light.shape === "rectangle" &&
-          xScaled >= light.posX &&
-          xScaled <= light.posX + light.width &&
-          yScaled >= light.posY &&
-          yScaled <= light.posY + light.height
-        ) {
-          clickedLight = light;
-          break;
-        }
-      }
-
-      if (clickedLight) {
-          if (clickedLight.onClick === "ignore") {
-              console.log("Click ignored", clickedLight.color);
-          } else {
-              console.log(`Click sent (whileColorWas: ${clickedLight.color}, whileOnClickWas: ${clickedLight.onClick})`);
-              reportLightClickAction(clickedLight);
-          }
-      }
-    }
-
-    const reportLightClickAction = (light) => {
-      wsService.current.send({
-        type: 'lightClickAction', 
-        lightId: light.id,
-        whileColorWas: light.color
-      })
-    }
-
-    const drawRoom = (ctx) => {
-      if (!room) return
-
-      const canvas = canvasRef.current
-      canvas.width = window.innerWidth;
-      setScale(canvas.width / room.width);
-      canvas.height = room.height * scale;
-
-      ctx.fillStyle = "rgb(43, 51, 55)";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      lights.forEach((light) => {
-        if (!light.color) {
-          light.color = [0, 0, 0];
-          light.onClick = "ignore";
-        }
-        drawLight(ctx, light);
-      });
-    }
-
-    const drawLight = (ctx, light) => {
-      if (light.type === "ledSwitch") {
-        ctx.fillStyle = `rgb(${light.color[0]}, ${light.color[1]}, ${light.color[2]})`;
-        ctx.fillRect(light.posX * scale, light.posY * scale, light.width * scale, light.height * scale);
-      } else if (light.type === "screen") {
-        ctx.fillStyle = "rgb(0, 0, 0)";
-        ctx.fillRect(light.posX * scale, light.posY * scale, light.width * scale, light.height * scale);
-        ctx.font = "22px Arial";
-        ctx.fillStyle = "white";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        const text = light.color.filter((c) => c !== 0).join(",");
-        ctx.fillText(text, light.posX * scale + (light.width * scale) / 2, light.posY * scale + (light.height * scale) / 2);
-      }
-    }
-
-    const applyBufferedLightUpdates = () => {
-      const ctx = canvasRef.current.getContext("2d");
-      bufferedLightUpdates.current.forEach((lightUpdate) => {
-        const updatedLights = lights.map((light) =>
-          light.id === lightUpdate.lightId ? { ...light, color: lightUpdate.color } : light
-        );
-        setLights(updatedLights);
-        drawLight(ctx, updatedLights.find((l) => l.id === lightUpdate.lightId));
-      });
-      bufferedLightUpdates.current = [];
-    }
+      return () => clearInterval(interval)
+    }, [])
 
     return (
       <div id="monitor" className="d-flex">

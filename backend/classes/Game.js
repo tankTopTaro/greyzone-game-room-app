@@ -30,7 +30,6 @@ export default class Game {
         this.status = undefined
         this.gameStartedAt = undefined
         this.lastLevelStartedAt = undefined
-        this.levelsStartedWhileSessionIsWaiting = 0
         this.lastLevelCreatedAt = Date.now()
         this.createdAt = Date.now()
     }
@@ -97,25 +96,22 @@ export default class Game {
     async prepare() {
         return new Promise((resolve, reject) => {
             console.log('preparation starts...')
-
             this.lastLifeLostAt = 0
-
             this.countdown = this.timeForLevel
             this.lifes = 5
 
-            let message = {
-                type: 'newLevelStarts',
-                rule: this.rule,
-                level: this.level,
-                countdown: this.countdown,
-                lifes: this.lifes,
-                roomType: this.room.type
-            }
-
-            this.room.socket.broadcastMessage('monitor', message)
+            this.room.socket.broadcastMessage('monitor', {
+               type: 'newLevelStarts',
+               rule: this.rule,
+               level: this.level,
+               countdown: this.countdown,
+               lifes: this.lifes,
+               roomType: this.room.type
+           })
 
             setTimeout(async () => {
                 try {
+                    clearInterval(this.animationMetronome)
                     await this.prepareShapes()
                     console.log('preparation ends...')
                     this.status = 'prepared'
@@ -135,6 +131,8 @@ export default class Game {
             const shapesData = await fs.promises.readFile(SHAPES_CONFIG_PATH, 'utf8')
             const configurations = JSON.parse(shapesData)
 
+            console.log(`Level ${this.level} Config: ${configurations[this.level]}`)
+
             const levelConfig = configurations[this.level]
 
             if (!levelConfig) {
@@ -146,11 +144,11 @@ export default class Game {
                 let pathDotsToUse = levelConfig.pathDots
 
                 switch(this.level) {
-                    case "1":
-                    case "2":
+                    case 1:
+                    case 2:
                         pathDotsToUse = index === 1 && levelConfig.extraPathDots.length > 0 ? levelConfig.extraPathDots : levelConfig.pathDots
                         break
-                    case "3":
+                    case 3:
                         pathDotsToUse = index === 1 && levelConfig.safeDots.length > 0 ? levelConfig.safeDots : levelConfig.pathDots
                         break
                     default:
@@ -168,8 +166,6 @@ export default class Game {
 
     handleLightClickAction(lightId, whileColorWas) {
         let clickedLight = this.GetLightById(lightId)
-        //console.log('TEST: clickedLight '+clickedLight+' whileColorWas: '+ whileColorWas)
-    
         this.handleGameSpecificLightAction(clickedLight, whileColorWas)
     }
 
@@ -234,52 +230,60 @@ export default class Game {
     }
 
     levelCompleted() {
-        clearInterval(this.animationMetronome)
-
-        if(this.room.waitingGameSession === undefined) {
-
-        } else if(this.levelsStartedWhileSessionIsWaiting < 3) {
-
-        } else {
-            this.end()
-        }
+       this.room.socket.broadcastMessage('monitor', {
+         type: 'levelCompleted',
+         message: 'Player Wins',
+         'cache-audio-file-and-play': 'levelCompleted'
+      })
+         
+      this.startNextLevel()
     }
 
     levelFailed() {
-        clearInterval(this.animationMetronome)
+         this.room.socket.broadcastMessage('monitor', {
+            type: 'levelFailed',
+            message: 'Player Lose',
+            'cache-audio-file-and-play': 'levelFailed'
+         })
 
-        if(this.room.waitingGameSession === undefined) {
-
-        } else {
-            this.end()
-        }
-    }
-
-    offerSameLevel() {
-        this.startSameLevel()
-    }
-
-    offerNextLevel() {
-        this.startNextLevel()
+         this.endAndExit()
     }
 
     async startSameLevel() {
-        if(this.room.waitingGameSession !== undefined) {
-            this.levelsStartedWhileSessionIsWaiting++
-        }
-        this.reset()
-        await this.prepare()
-        this.start()
+      this.room.socket.broadcastMessage('monitor', {
+         type: 'offerSameLevel',
+         message: 'Game Over! Press Yellow Button to play again, press Red Button to leave the room.'
+      })
+
+      this.reset()
+      await this.prepare()
+      this.start()
     }
 
     async startNextLevel() {
-        if(this.room.waitingGameSession !== undefined) {
-            this.levelsStartedWhileSessionIsWaiting++
-        }
-        this.level++
-        this.reset()
-        await this.prepare()
-        this.start()
+      this.room.socket.broadcastMessage('monitor', {
+            type: 'offerNextLevel',
+            message: 'Game Over! Press Green Button to proceed to next level, press Red Button to leave the room.'
+         })
+   
+      // Reset current game session properly
+      this.reset()
+      this.room.isFree = false
+   
+      // Properly assign the new game session
+      this.room.currentGameSession = await this.room.gameManager.loadGame(
+         this.room.type,
+         this.rule, 
+         parseInt(this.level, 10) + 1, 
+         this.players, 
+         this.team,
+         this.book_room_until,
+         this.room
+      )
+
+      if (this.room.currentGameSession) {
+         this.room.currentGameSession.start()
+      }
     }
 
     updateCountdown() {
@@ -289,11 +293,19 @@ export default class Game {
 
         if (timeLeft !== this.countdown) {
             if (timeLeft >= 0) {
-                //console.log('COUNTDOWN:', this.countdown)
+                const message = {
+                  type: 'updateCountdown',
+                  countdown: this.countdown
+                }
+
+                this.room.socket.broadcastMessage('monitor', message)
                 this.countdown = timeLeft
             } else {
-                console.log('TIME IS UP')
-                this.end()
+                this.room.socket.broadcastMessage('monitor', { 
+                  type: 'timeIsUp', 
+                  message: 'Player ran out of time.'
+               })
+                this.levelFailed()
             }
         }
     }
@@ -310,36 +322,44 @@ export default class Game {
     }
 
     updateLifes() {
-        console.log('REMAINING LIFES', this.lifes)
-        if (this.lifes === 0) {
-            console.log('NO MORE LIFES')
-            this.levelFailed()
-        }
+      this.room.socket.broadcastMessage('monitor', {
+         type: 'updateLifes',
+         lifes: this.lifes,
+         'cache-audio-file-and-play': 'playerLoseLife'
+      })
+
+      if (this.lifes === 0) {
+         this.levelFailed()
+      }
     }
 
     start() {
-        console.log('Starting the Game...')
-        this.lastLevelStartedAt = Date.now()
+         if (this.status === 'running') {
+            console.warn('Game is already running. Ignoring start call.');
+            return; // Prevent multiple starts
+         }
 
-        if (this.animationMetronome) {
-            clearInterval(this.animationMetronome)
-        }
-
-        this.animationMetronome = setInterval(() =>{
-            this.updateShapes()
-            this.updateCountdown()
-            this.applyShapesOnLights()
-            this.room.sendLightsInstructionsIfIdle()
-        } , 1000/25)
+        this.setupGame()
 
         this.gameStartedAt = Date.now()
         this.status = 'running'
         console.log('Game Session started.')
     }
 
-    async end() {
-        this.reset()
-        this.room.isFree = true
-        console.log(`Ending game: ${this.constructor.name}`)
+    setupGame() {
+      console.log('Setting up game...')
+    }
+
+    async endAndExit() {
+      console.log('Game Ended...')
+      this.reset()
+      this.room.isFree = true
+
+      if (this.room.waitingGameSession !== undefined) {
+         this.room.currentGameSession = this.room.waitingGameSession
+         this.room.waitingGameSession = undefined
+
+         await this.room.currentGameSession.start()
+      }
     }
 }

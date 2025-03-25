@@ -11,33 +11,56 @@ export default class DoubleGrid extends Game {
     }
 
     start() {
-        super.start()
+      const ruleHandlers = {
+         1: () => {
+            this.lightIdsSequence = []
 
-        console.log(`DoubleGrid is running!`)
+            const numbersSequence = this.makeNumberSequence(12)
+      
+            console.log('TEST: numbersSequence: ', numbersSequence)
+      
+            this.room.lightGroups.wallScreens.forEach((light, i) => {
+               light.color = [0, 0, numbersSequence[i]]
+            })
+      
+            this.room.lightGroups.wallButtons.forEach((light, i) => {
+               light.color = blueGreen1
+               light.onClick = 'report'
+               this.lightIdsSequence[numbersSequence[i]] = light.id
+            })
+      
+            this.lightIdsSequence.splice(0, 1)
+         }
+      }
 
-        if (this.rule !== 1) return
+      super.start()
 
-        this.lightIdsSequence = []
+      console.log(`DoubleGrid is running!`)
 
-        const numbersSequence = this.makeNumberSequence(12)
+      if(!ruleHandlers[this.rule]) {
+         console.warn(`No handlers for this rule ${this.rule}`)
+      }
 
-        console.log('TEST: numbersSequence: ', numbersSequence)
+      ruleHandlers[this.rule]()
+    }
 
-        this.room.lightGroups.wallScreens.forEach((light, i) => {
-            light.color = [0, 0, numbersSequence[i]]
-        })
+    setupGame() {
+      this.lastLevelStartedAt = Date.now()
 
-        this.room.lightGroups.wallButtons.forEach((light, i) => {
-            light.color = blueGreen1
-            light.onClick = 'report'
-            this.lightIdsSequence[numbersSequence[i]] = light.id
-        })
-
-        this.lightIdsSequence.splice(0, 1)
+      if (this.animationMetronome) {
+         clearInterval(this.animationMetronome)
+     }
+      
+      this.animationMetronome = setInterval(() =>{
+         this.updateShapes()
+         this.updateCountdown()
+         this.applyShapesOnLights()
+         this.room.sendLightsInstructionsIfIdle()
+     } , 1000/25)
     }
 
     stop() {
-        console.log('Game has been stopped')
+      console.log('Game has been stopped')
     }
 
     makeNumberSequence(size) {
@@ -48,8 +71,10 @@ export default class DoubleGrid extends Game {
 
     shuffleArray(array) {
         for (let i = array.length - 1; i > 0; i--) {
-            const j = this.getRandomInt(0, i)
-            [array[i], array[j]] = [array[j], array[i]]
+            let j = this.getRandomInt(0, i)
+            let temp = array[i]; // Store current value
+            array[i] = array[j]; // Swap values
+            array[j] = temp; // Assign stored value to new position
         }
     }
 
@@ -63,7 +88,7 @@ export default class DoubleGrid extends Game {
                 if (this.room.lightGroups['mainFloor'].includes(clickedLight)) {
                     this.handleMainFloorClick(clickedLight, whileColorWas)
                 } else if (this.room.lightGroups['wallButtons'].includes(clickedLight)) {
-                    this.handleWallButtonClick(clickedLights)
+                    this.handleWallButtonClick(clickedLight)
                 }
             },
         }
@@ -77,9 +102,6 @@ export default class DoubleGrid extends Game {
     }
 
     handleMainFloorClick(clickedLight, whileColorWas) {
-        console.log('MAIN FLOOR CLICK')
-        console.log('whileColorWas:', whileColorWas)
-
         if (Array.isArray(whileColorWas)) whileColorWas = whileColorWas.join(',')
 
         if (whileColorWas !== '255,0,0') return
@@ -101,13 +123,13 @@ export default class DoubleGrid extends Game {
         clickedLight.color = black
         clickedLight.onClick = 'ignore'
 
-        console.log('Correct button clicked')
+        //console.log('Correct button clicked')
         this.broadcastSuccess()
 
         this.lightIdsSequence.shift()
 
         if (this.lightIdsSequence.length === 0) {
-            this.level === 3 ? this.endGame() : setTimeout(() => this.levelCompleted(), 50)
+            this.level === 3 ? this.endGame() : this.levelCompleted()
         }
     }
 
@@ -117,7 +139,6 @@ export default class DoubleGrid extends Game {
     }
 
     createShape(clickedLight) {
-        console.log('Create shape')
         this.shapes.push(new Shape(
             clickedLight.posX + clickedLight.width / 2,
             clickedLight.posY + clickedLight.height / 2,
@@ -135,28 +156,27 @@ export default class DoubleGrid extends Game {
 
     broadcastFailure() {
         const message = {
-            type: 'playerFailed'
+            type: 'playerFailed',
         }
-
         this.room.socket.broadcastMessage('monitor', message)
     }
 
     broadcastSuccess() {
         const message = {
-            type: 'playerSuccess'
+            type: 'playerSuccess',
+            'cache-audio-file-and-play': 'playerScored'
         }
-
         this.room.socket.broadcastMessage('monitor', message)
     }
 
     endGame() {
         const message = {
-            type: 'levelCompleted'
+            type: 'levelCompleted',
+            'cache-audio-file-and-play': 'levelCompleted'
         }
 
         this.room.socket.broadcastMessage('monitor', message)
 
-        setTimeout(() => this.end(), 50)
-        this.room.isFree = true
+        this.endAndExit()
     }
 }
