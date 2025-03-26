@@ -34,7 +34,7 @@ export default class Shape{
         this.pathLengthAbs = length
 
         if(this.duration !== undefined){
-            const currentDate = Date.now();
+            const currentDate = Date.now()
             this.activeUntil = currentDate + this.duration
         }
 

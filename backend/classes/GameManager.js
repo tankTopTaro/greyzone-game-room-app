@@ -1,10 +1,11 @@
 import path from 'path'
-import fs from 'fs'
 import { fileURLToPath } from 'url'
+import getAvailableGames from '../utils/getAvailableGames.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+const GAMES_DIR = path.join(__dirname, '../games')
 export default class GameManager {
     constructor(env) {
         this.env = env
@@ -12,15 +13,19 @@ export default class GameManager {
 
     async loadGame(roomType, rule, level, players, team, book_room_until, roomInstance) {
         try {
-            const gamePath = path.join(__dirname, '../games', `${roomType}.js`)
+            // get all available game files
+            const availableGames = getAvailableGames()
 
-            console.log(gamePath)
+            // find a case-insensitive match for roomType
+            const matchedGame = availableGames.find(game => game.toLowerCase() === roomType.toLowerCase())
 
-            if (!fs.existsSync(gamePath)) {
-                throw new Error(`Game ${roomType} not found.`)
-            }
+            if (!matchedGame) throw new Error(`Game ${roomType} not found.`)
 
-            const { default: GameClass } = await import(`../games/${roomType}.js`)
+            const gamePath = path.join(GAMES_DIR, `${matchedGame}.js`)
+
+            console.log(`Loading game: ${gamePath}`)
+
+            const { default: GameClass } = await import(`file://${gamePath}`)
 
             const gameInstance = new GameClass(rule, level, players, team, book_room_until, this.env, roomInstance)
 

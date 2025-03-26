@@ -1,19 +1,21 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable no-unused-vars */
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react"
 import axios from 'axios'
 import WebSocketService from "../utils/WebSocketService.js"
 
-const WS_URL = 'ws://localhost:8081'
+const WS_URL = 'ws://localhost:8082'
 const CLIENT = 'monitor'
 
 const Monitor = () => {
-    const [countdown, setCountdown] = useState("00:00");
-    const [status, setStatus] = useState("");
-    const [lifes, setLifes] = useState(5);
-    const [roomInfo, setRoomInfo] = useState("");
-    const [currentPlayers, setCurrentPlayers] = useState([]);
-    const [nextPlayers, setNextPlayers] = useState([]);
+    const [prepTime, setPrepTime] = useState(15)
+    const [countdown, setCountdown] = useState(0)
+    const [lifes, setLifes] = useState(0)
+    const [status, setStatus] = useState("")
+    const [roomInfo, setRoomInfo] = useState("")
+    const [bookRoomUntil, setBookRoomUntil] = useState("")
+    const [players, setPlayers] = useState([])
+    const [team, setTeam] = useState({})
 
     const wsService = useRef(null)
 
@@ -21,6 +23,7 @@ const Monitor = () => {
     const MAX_POINTS = 10
     const REMOVE_INTERVAL = 1000
     const [clickPoints, setClickPoints] = useState([])
+
     const [room, setRoom] = useState(null)
     const [lights, setLights] = useState([])
     const [scale, setScale] = useState(1)
@@ -80,27 +83,27 @@ const Monitor = () => {
       const canvas = canvasRef.current
       const ctx = canvas.getContext('2d')
 
-      const x = (event.clientX - canvas.getBoundingClientRect().left) * (canvas.width / canvas.offsetWidth);
-      const y = (event.clientY - canvas.getBoundingClientRect().top) * (canvas.height / canvas.offsetHeight);
-      const xScaled = x / scale;
-      const yScaled = y / scale;
+      const x = (event.clientX - canvas.getBoundingClientRect().left) * (canvas.width / canvas.offsetWidth)
+      const y = (event.clientY - canvas.getBoundingClientRect().top) * (canvas.height / canvas.offsetHeight)
+      const xScaled = x / scale
+      const yScaled = y / scale
 
       setClickPoints((prev) => {
          const newPoints = [...prev, { x, y }]
-         return newPoints.length > MAX_POINTS ? newPoints.slice(-MAX_POINTS) : newPoints;
+         return newPoints.length > MAX_POINTS ? newPoints.slice(-MAX_POINTS) : newPoints
       })
 
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(x, y, 10, 0, 2 * Math.PI);
-      ctx.fillStyle = "rgba(255, 255, 0, 0.6)";
-      ctx.fill();
-      ctx.closePath();
-      ctx.restore();
+      ctx.save()
+      ctx.beginPath()
+      ctx.arc(x, y, 10, 0, 2 * Math.PI)
+      ctx.fillStyle = "rgba(255, 255, 0, 0.6)"
+      ctx.fill()
+      ctx.closePath()
+      ctx.restore()
 
-      let clickedLight = null;
+      let clickedLight = null
       for (let i = lights.length - 1; i >= 0; i--) {
-        const light = lights[i];
+        const light = lights[i]
         if (
           light.shape === "rectangle" &&
           xScaled >= light.posX &&
@@ -108,17 +111,17 @@ const Monitor = () => {
           yScaled >= light.posY &&
           yScaled <= light.posY + light.height
         ) {
-          clickedLight = light;
-          break;
+          clickedLight = light
+          break
         }
       }
 
       if (clickedLight) {
           if (clickedLight.onClick === "ignore") {
-              console.log("Click ignored", clickedLight.color);
+              console.log("Click ignored", clickedLight.color)
           } else {
-              // console.log(`Click sent (whileColorWas: ${clickedLight.color}, whileOnClickWas: ${clickedLight.onClick})`);
-              reportLightClickAction(clickedLight);
+              // console.log(`Click sent (whileColorWas: ${clickedLight.color}, whileOnClickWas: ${clickedLight.onClick})`)
+              reportLightClickAction(clickedLight)
           }
       }
     }
@@ -135,82 +138,82 @@ const Monitor = () => {
       if (!room) return
 
       const canvas = canvasRef.current
-      canvas.width = window.innerWidth;
-      setScale(canvas.width / room.width);
-      canvas.height = room.height * scale;
+      canvas.width = window.innerWidth
+      setScale(canvas.width / room.width)
+      canvas.height = room.height * scale
 
-      ctx.fillStyle = "rgb(43, 51, 55)";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "rgb(43, 51, 55)"
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
 
       lights.forEach((light) => {
         if (!light.color) {
-          light.color = [0, 0, 0];
-          light.onClick = "ignore";
+          light.color = [0, 0, 0]
+          light.onClick = "ignore"
         }
-        drawLight(ctx, light);
-      });
+        drawLight(ctx, light)
+      })
 
       clickPoints.forEach(({ x, y }) => {
-         ctx.beginPath();
-         ctx.arc(x, y, 10, 0, 2 * Math.PI);
-         ctx.fillStyle = "rgba(255, 255, 0, 0.6)";
-         ctx.fill();
-         ctx.closePath();
-       });
+         ctx.beginPath()
+         ctx.arc(x, y, 10, 0, 2 * Math.PI)
+         ctx.fillStyle = "rgba(255, 255, 0, 0.6)"
+         ctx.fill()
+         ctx.closePath()
+       })
     }
 
     const drawLight = (ctx, light) => {
       if (light.type === "ledSwitch") {
-        ctx.fillStyle = `rgb(${light.color[0]}, ${light.color[1]}, ${light.color[2]})`;
-        ctx.fillRect(light.posX * scale, light.posY * scale, light.width * scale, light.height * scale);
+        ctx.fillStyle = `rgb(${light.color[0]}, ${light.color[1]}, ${light.color[2]})`
+        ctx.fillRect(light.posX * scale, light.posY * scale, light.width * scale, light.height * scale)
       } else if (light.type === "screen") {
-        ctx.fillStyle = "rgb(0, 0, 0)";
-        ctx.fillRect(light.posX * scale, light.posY * scale, light.width * scale, light.height * scale);
-        ctx.font = "22px Arial";
-        ctx.fillStyle = "white";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        const text = light.color.filter((c) => c !== 0).join(",");
-        ctx.fillText(text, light.posX * scale + (light.width * scale) / 2, light.posY * scale + (light.height * scale) / 2);
+        ctx.fillStyle = "rgb(0, 0, 0)"
+        ctx.fillRect(light.posX * scale, light.posY * scale, light.width * scale, light.height * scale)
+        ctx.font = "22px Arial"
+        ctx.fillStyle = "white"
+        ctx.textAlign = "center"
+        ctx.textBaseline = "middle"
+        const text = light.color.filter((c) => c !== 0).join(",")
+        ctx.fillText(text, light.posX * scale + (light.width * scale) / 2, light.posY * scale + (light.height * scale) / 2)
       }
     }
 
     const applyBufferedLightUpdates = () => {
-      const ctx = canvasRef.current.getContext("2d");
+      const ctx = canvasRef.current.getContext("2d")
       bufferedLightUpdates.current.forEach((lightUpdate) => {
         const updatedLights = lights.map((light) =>
           light.id === lightUpdate.lightId ? { ...light, color: lightUpdate.color } : light
-        );
-        setLights(updatedLights);
-        drawLight(ctx, updatedLights.find((l) => l.id === lightUpdate.lightId));
-      });
-      bufferedLightUpdates.current = [];
+        )
+        setLights(updatedLights)
+        drawLight(ctx, updatedLights.find((l) => l.id === lightUpdate.lightId))
+      })
+      bufferedLightUpdates.current = []
     }
 
     // WebSocket Types Methods
     const handleUpdateLight = (data) => {
-      let light = data;
+      let light = data
             
       if (!lightsAreDrawn) {
-         bufferedLightUpdates.current.push(light);
-         return;
+         bufferedLightUpdates.current.push(light)
+         return
       }
 
       setLights((prevLights) => {
          if (!prevLights[light.lightId]) {
-            console.warn(`Light ID ${light.lightId} does not exist in lights array`, prevLights);
-            return prevLights; // Prevents modifying an undefined index
+            console.warn(`Light ID ${light.lightId} does not exist in lights array`, prevLights)
+            return prevLights // Prevents modifying an undefined index
          }
 
-         const updatedLights = [...prevLights]; // Create a new array
+         const updatedLights = [...prevLights] // Create a new array
          updatedLights[light.lightId] = {
             ...updatedLights[light.lightId],
             color: light.color,
             onClick: light.onClick,
-         };
+         }
 
-         return updatedLights;
-      });
+         return updatedLights
+      })
     }
 
     useEffect(() => {
@@ -235,16 +238,26 @@ const Monitor = () => {
             },
             'levelCompleted': () => {
                console.log(data.message)
+               setStatus(data.message)
                playAudio(data['cache-audio-file-and-play'])
             },
             'levelFailed': () => {
                console.log(data.message)
+               setStatus(data.message)
                playAudio(data['cache-audio-file-and-play'])
+               setTimeout(() => {
+                  setStatus('')
+                  setCountdown('00:00')
+                  setLifes(0)
+               })
             },
             'newLevelStarts': () => {
                setCountdown(data.countdown)
                setLifes(data.lifes)
                setRoomInfo(`${data.roomType} | Rule ${data.rule} Level ${data.level}`)
+               setPlayers(data.players)
+               setTeam(data.team || '')
+               setBookRoomUntil(formatDate(data.bookRoomUntil))
             },
             'offerNextLevel': () => console.log(data.message),
             'offerSameLevel': () => console.log(data.message),
@@ -252,6 +265,7 @@ const Monitor = () => {
                playAudio(data['cache-audio-file-and-play'])
             },
             'playerFailed': () => console.log('playerFailed'),
+            'roomDisabled': () => console.log(data.message),
             'timeIsUp': () => console.log(data.message),
             'updateCountdown': () => {
                setCountdown(data.countdown)
@@ -261,6 +275,13 @@ const Monitor = () => {
                playAudio(data['cache-audio-file-and-play'])
             },
             'updateLight': () => handleUpdateLight(data),
+            'updatePreparationInterval': () => {
+               setPrepTime(data.countdown)
+               console.log(data)
+               if (data['cache-audio-file']) preloadAudio(data['cache-audio-file'])
+               
+               if (data['play-audio-file']) playAudio(data['play-audio-file'])
+            }
         }
 
         if (!messageHandlers[data.type]) {console.warn(`No handler for this message type ${data.type}`)}
@@ -332,6 +353,29 @@ const Monitor = () => {
       return () => clearInterval(interval)
     }, [])
 
+    const formatTime = (seconds) => { 
+      const minutes = Math.floor(seconds / 60)
+      const remainingSeconds = seconds % 60
+
+      return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
+    }
+
+    const formatDate = (isoString) => {
+      if (!isoString) return 'No booking information'
+
+      const date = new Date(isoString)
+      return date.toLocaleString('en-US', {
+         month: 'long',
+         day: 'numeric',
+         year: 'numeric',
+         hour: 'numeric',
+         minute: 'numeric',
+         hour12: true
+      })
+    }
+
+    const displayedTime = prepTime > 0 ? prepTime : countdown
+
     return (
       <div id="monitor" className="d-flex">
         {/* Left Column */}
@@ -344,75 +388,89 @@ const Monitor = () => {
               style={{ width: "100%" }}>
           </canvas>
           
-          {/* Game Status */}
-          <div id="gameStatus" className="row justify-content-center w-100">
-            <div className="d-flex justify-content-between">
-              
-              {/* Countdown Timer */}
-              <div className="d-flex gap-2 align-items-center text-center">
-                <svg xmlns="http://www.w3.org/2000/svg" width="35" height="35" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                  <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
-                  <path d="M12 7v5" />
-                </svg>
-                <span id="countdown">{countdown}</span>
-              </div>
+          <div className="container py-3 text-white">
+            {/* Game Status */}
+            <div id="gameStatus" className="row justify-content-center w-100">
+               <div className="d-flex justify-content-between">
+                  
+                  {/* Countdown Timer */}
+                  <div className="d-flex gap-2 align-items-center text-center">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="35" height="35" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                        <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
+                        <path d="M12 7v5" />
+                     </svg>
+                     <span id="countdown"> 
+                        {formatTime(displayedTime)}
+                     </span>
+                  </div>
 
-              {/* Game Status */}
-              <div className="d-flex gap-2 align-items-center text-center">
-                <span id="status">{status}</span>
-              </div>
+                  {/* Game Status */}
+                  <div className="d-flex gap-2 align-items-center text-center">
+                     <span id="status" >
+                        {status}
+                     </span>
+                  </div>
 
-              {/* Lives */}
-              <div className="d-flex gap-2 align-items-center text-center">
-                <svg xmlns="http://www.w3.org/2000/svg" width="35" height="35" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                  <path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572" />
-                </svg>
-                <span id="lifes">{lifes}</span>
-              </div>
-
+                  {/* Lives */}
+                  <div className="d-flex gap-2 align-items-center text-center">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="35" height="35" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                        <path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572" />
+                     </svg>
+                     <span id="lifes">{lifes}</span>
+                  </div>
+               </div>
             </div>
-          </div>
 
-          {/* Room Info */}
-          <div className="row justify-content-center w-100 text-white">
-            <small id="roomInfo" className="fs-6">{roomInfo}</small>
-          </div>
-        </div>
-
-        {/* Right Column */}
-        <div className="col-4 container py-2">
-          <div id="lists" className="row w-100 d-flex flex-column justify-content-between align-items-start text-white mt-4">
+            {/* Room Info */}
+            <div className="row justify-content-center w-100 text-white">
+               <small id="roomInfo" className='fs-6'>
+                  {roomInfo || "Room information not available"}
+               </small>
+            </div>
             
-            {/* Current Players */}
-            <div className="w-100 d-flex flex-column">
-              <h4 className="fs-4 mb-3">Current Players</h4>
-              <ul id="current-players" className="list-unstyled">
-                {currentPlayers.length > 0 ? (
-                  currentPlayers.map((player, index) => <li key={index}>{player}</li>)
-                ) : (
-                  <li>No players</li>
-                )}
-              </ul>
+            {/* Book Room Until */}
+            <div className="row justify-content-center w-100 text-white">
+               <small id="bookRoomUntil" className='fs-6'>
+                  {bookRoomUntil ? `Booked Until: ${bookRoomUntil}` : "No booking information"}
+               </small>
             </div>
 
-            {/* Next Players */}
-            <div className="w-100 d-flex flex-column">
-              <h4 className="fs-4 mb-3">Next Players</h4>
-              <ul id="next-players" className="list-unstyled">
-                {nextPlayers.length > 0 ? (
-                  nextPlayers.map((player, index) => <li key={index}>{player}</li>)
-                ) : (
-                  <li>No next players</li>
-                )}
-              </ul>
-            </div>
+            {/* Right Column */}
+            <div className="col-4 container py-2 text-white">
+               {/* Team Name */}
+               <h4 className='fs-6'>
+                  Team: {team?.name || "No team assigned"}
+               </h4>
 
+               {/* Players */}
+               <div className="w-100 d-flex flex-column">
+                  <ul id="current-players" className="list-unstyled">
+                     {Array.isArray(players) && players.length > 0 ? (
+                        players.map((player, index) => (
+                           <li key={index} className="d-flex align-items-center gap-2 mb-2">
+                              <img 
+                                 src={player.id ? `https://greyzone-central-server-app.onrender.com/api/images/players/${player.id}.jpg` : 'https://placehold.co/40x40?text=No+Image'}
+                                 alt={player.nick_name || 'Unknown'}
+                                 width="40"
+                                 height="40"
+                                 className="rounded-circle"
+                              />
+                              <span>{player.nick_name ?? 'Unknown'}</span>
+                           </li>
+                        ))
+                     ) : (
+                        <li>No players</li>
+                     )}
+                  </ul>
+               </div>
+            </div>
           </div>
+
         </div>
       </div>
-    );
-};
+    )
+}
 
-export default Monitor;
+export default Monitor

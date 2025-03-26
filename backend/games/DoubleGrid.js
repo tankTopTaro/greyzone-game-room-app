@@ -1,14 +1,15 @@
 import Game from '../classes/Game.js'
-import Shape from '../classes/Shape.js';
-import { hsvToRgb } from '../utils/utils.js';
+import Shape from '../classes/Shape.js'
+import { hsvToRgb } from '../utils/utils.js'
 
 const blueGreen1 = hsvToRgb([130,220,255])
 const black = hsvToRgb([0,0,0])
 
 export default class DoubleGrid extends Game {
     constructor (players, rule, level, team, book_room_until, env, roomInstance) {
-        super(players, rule, level, team, book_room_until, env, roomInstance, 60)
-    }
+        super(players, rule, level, team, book_room_until, env, roomInstance, 60, 15)
+        this.running = false
+      }
 
     start() {
       const ruleHandlers = {
@@ -32,6 +33,8 @@ export default class DoubleGrid extends Game {
             this.lightIdsSequence.splice(0, 1)
          }
       }
+
+      this.running = true
 
       super.start()
 
@@ -60,26 +63,34 @@ export default class DoubleGrid extends Game {
     }
 
     stop() {
-      console.log('Game has been stopped')
+      if (this.running) {
+         this.running = false
+         this.reset()
+         console.log('Game has been stopped')
+         this.room.socket.broadcastMessage('monitor', {
+            type: 'roomDisabled',
+            message: 'Room has been disabled.'
+         })
+      }
     }
 
     makeNumberSequence(size) {
-        const numbersSequence = Array.from({ length: size }, (_, i) => i + 1);
-        this.shuffleArray(numbersSequence);
-        return numbersSequence;
+        const numbersSequence = Array.from({ length: size }, (_, i) => i + 1)
+        this.shuffleArray(numbersSequence)
+        return numbersSequence
     }
 
     shuffleArray(array) {
         for (let i = array.length - 1; i > 0; i--) {
             let j = this.getRandomInt(0, i)
-            let temp = array[i]; // Store current value
-            array[i] = array[j]; // Swap values
-            array[j] = temp; // Assign stored value to new position
+            let temp = array[i] // Store current value
+            array[i] = array[j] // Swap values
+            array[j] = temp // Assign stored value to new position
         }
     }
 
     getRandomInt(min, max) {
-        return Math.floor(Math.random() * (max - min + 1)) + min;
+        return Math.floor(Math.random() * (max - min + 1)) + min
     }
 
     handleGameSpecificLightAction(clickedLight, whileColorWas) {

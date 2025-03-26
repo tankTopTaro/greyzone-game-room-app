@@ -17,7 +17,7 @@ const startGameSessionController = {
         const [roomType, rule, level] = room.split(',')
 
         if (!roomType || !rule || !level || !players.length) {
-            return res.status(400).json({ error: 'Invalid room format or missing players' });
+            return res.status(400).json({ error: 'Invalid room format or missing players' })
         }
 
         // Check if a game session is already running
@@ -27,7 +27,7 @@ const startGameSessionController = {
 
         await roomInstance.startGame(roomType, rule, level, players, team, book_room_until)
 
-        res.json({ message: `Game started in ${roomType} with rule: ${rule}, level: ${level}` });
+        res.json({ message: `Game started in ${roomType} with rule: ${rule}, level: ${level}` })
     }
 }
 

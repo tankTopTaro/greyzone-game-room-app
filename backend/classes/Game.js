@@ -15,7 +15,7 @@ const green = hsvToRgb([85,255,255])
 const red = hsvToRgb([0,255,255])
 
 export default class Game {
-    constructor(rule, level, players = [], team, book_room_until, env, roomInstance, timeForLevel = 60) {
+    constructor(rule, level, players = [], team, book_room_until, env, roomInstance, timeForLevel = 60, timeToPrepare = 15) {
         this.players = players
         this.rule = rule
         this.level = level
@@ -26,12 +26,17 @@ export default class Game {
         this.timeForLevel = timeForLevel
 
         this.animationMetronome = undefined
+        this.bookRoomInterval = undefined
         this.shapes = []
         this.status = undefined
         this.gameStartedAt = undefined
         this.lastLevelStartedAt = undefined
         this.lastLevelCreatedAt = Date.now()
         this.createdAt = Date.now()
+
+        this.timeToPrepare = timeToPrepare
+        this.preparationInterval = undefined
+        this.preparationIntervalStartedAt = undefined
     }
 
     async init() {
@@ -40,6 +45,7 @@ export default class Game {
         await this.prepareAndGreet()
             .then(() => {
                 this.room.isFree = false
+                this.trackBookRoomTime()
                 this.start()
                 result = true
             })
@@ -50,8 +56,8 @@ export default class Game {
                 console.log('Game session cancelled.')
                 console.log('Room remains free.')
                 result = e
-                // TODO: reportErrorToCentral(e);
-            });
+                // TODO: reportErrorToCentral(e)
+            })
 
         return result
     }
@@ -61,6 +67,17 @@ export default class Game {
             clearInterval(this.animationMetronome)
             this.animationMetronome = undefined
         }
+
+        if (this.bookRoomInterval) {
+            clearInterval(this.bookRoomInterval)
+            this.bookRoomInterval = undefined
+        }
+
+        if (this.preparationInterval) {
+            clearInterval(this.preparationInterval)
+            this.preparationInterval = undefined
+        }
+        
         this.status = undefined
         this.shapes = []
         this.lastLevelCreatedAt = Date.now()
@@ -85,11 +102,11 @@ export default class Game {
 
     greet() {
         return new Promise((resolve) => {
-            console.log('Greeting sound starts...');
+            console.log('Greeting sound starts...')
             setTimeout(() => {
-                console.log('Greeting sound ends...');
-                resolve(true);
-            }, 2000);
+                console.log('Greeting sound ends...')
+                resolve(true)
+            }, 2000)
         })
     }
     
@@ -99,6 +116,7 @@ export default class Game {
             this.lastLifeLostAt = 0
             this.countdown = this.timeForLevel
             this.lifes = 5
+            this.prepTime = this.timeToPrepare
 
             this.room.socket.broadcastMessage('monitor', {
                type: 'newLevelStarts',
@@ -106,20 +124,33 @@ export default class Game {
                level: this.level,
                countdown: this.countdown,
                lifes: this.lifes,
-               roomType: this.room.type
+               roomType: this.room.type,
+               players: this.players,
+               team: this.team,
+               bookRoomUntil: this.book_room_until
            })
 
-            setTimeout(async () => {
-                try {
-                    clearInterval(this.animationMetronome)
-                    await this.prepareShapes()
-                    console.log('preparation ends...')
-                    this.status = 'prepared'
-                    resolve(true)
-                } catch (error) {
-                    console.log('CATCH: prepareShapes() failed')
-                    reject(e)
-                }
+           this.preparationIntervalStartedAt = Date.now()
+
+            this.preparationInterval = setInterval(() => {
+               this.updatePreparationInterval()
+
+               if (this.prepTime === 0) {
+                  clearInterval(this.preparationInterval)
+
+                  setTimeout(async () => {
+                     try {
+                        clearInterval(this.animationMetronome);
+                        await this.prepareShapes();
+                        console.log('preparation ends...');
+                        this.status = 'prepared';
+                        resolve(true); // Now resolve after preparation is complete
+                     } catch (error) {
+                        console.log('CATCH: prepareShapes() failed');
+                        reject(error);
+                     }
+                  }, 1000);
+               }
             }, 1000)
         })
     }
@@ -131,7 +162,7 @@ export default class Game {
             const shapesData = await fs.promises.readFile(SHAPES_CONFIG_PATH, 'utf8')
             const configurations = JSON.parse(shapesData)
 
-            console.log(`Level ${this.level} Config: ${configurations[this.level]}`)
+            // console.log(`Level ${this.level} Config: ${configurations[this.level]}`)
 
             const levelConfig = configurations[this.level]
 
@@ -152,13 +183,13 @@ export default class Game {
                         pathDotsToUse = index === 1 && levelConfig.safeDots.length > 0 ? levelConfig.safeDots : levelConfig.pathDots
                         break
                     default:
-                        break;
+                        break
                 }
 
                 this.shapes.push(new Shape(shape.x, shape.y, 'rectangle', shape.width, shape.height, shape.color, shape.action, pathDotsToUse, shape.speed, 'mainFloor'))
             })
             
-            console.log(`Loaded shapes configurations for type: ${this.room.type}`);
+            // console.log(`Loaded shapes configurations for type: ${this.room.type}`)
         } catch (error) {
             console.error(`Error loading shapes config: ${error.message}`)
         }
@@ -204,7 +235,7 @@ export default class Game {
             let lightHasColor = false
 
             for (let i = this.shapes.length - 1; i >= 0; i--) {
-                const shape = this.shapes[i];
+                const shape = this.shapes[i]
                 if(!shape.active){continue}
                 if(!(this.room.lightGroups[shape.affectsLightGroup].includes(light))){continue}
                 // does that shape cross into that light ?
@@ -218,7 +249,7 @@ export default class Game {
                     light.color = shape.color
                     light.onClick = shape.onClick
                     lightHasColor = true
-                    break;
+                    break
                 }
             }
 
@@ -240,14 +271,22 @@ export default class Game {
     }
 
     levelFailed() {
-         this.room.socket.broadcastMessage('monitor', {
-            type: 'levelFailed',
-            message: 'Player Lose',
-            'cache-audio-file-and-play': 'levelFailed'
-         })
+      const now = Date.now();
+      const bookRoomTime = this.book_room_until ? new Date(this.book_room_until + 'Z').getTime() : 0;
 
-         this.endAndExit()
-    }
+      this.room.socket.broadcastMessage('monitor', {
+         type: 'levelFailed',
+         message: 'Player Lose',
+         'cache-audio-file-and-play': 'levelFailed'
+      });
+
+      if (bookRoomTime > now) {
+         this.startSameLevel();
+      } else {
+         // Time is up, end the session
+         this.endAndExit();
+      }
+   }  
 
     async startSameLevel() {
       this.room.socket.broadcastMessage('monitor', {
@@ -256,6 +295,7 @@ export default class Game {
       })
 
       this.reset()
+      this.timeToPrepare = 0
       await this.prepare()
       this.start()
     }
@@ -333,19 +373,47 @@ export default class Game {
       }
     }
 
-    start() {
-         if (this.status === 'running') {
-            console.warn('Game is already running. Ignoring start call.');
-            return; // Prevent multiple starts
+    updatePreparationInterval() {
+      let timeLeft = Math.round((this.preparationIntervalStartedAt + (this.timeToPrepare * 1000) - Date.now()) / 1000)
+
+      if (timeLeft != this.prepTime) {
+         //console.log('TIMELEFT: ', timeLeft, 'PREPTIME: ', this.prepTime)
+         if (timeLeft >= 0) {
+            this.prepTime = timeLeft
+            if (this.prepTime === 15) {
+               this.room.socket.broadcastMessage('monitor', {
+                  type: 'updatePreparationInterval',
+                  countdown: this.prepTime,
+                  'cache-audio-file': '321go'
+               })
+            } else if (this.prepTime === 3) {
+               this.room.socket.broadcastMessage('monitor', {
+                  type: 'updatePreparationInterval',
+                  countdown: this.prepTime,
+                  'play-audio-file': '321go'
+               })
+            } else {
+               this.room.socket.broadcastMessage('monitor', {
+                  type: 'updatePreparationInterval',
+                  countdown: this.prepTime
+               })
+            }
          }
-
-        this.setupGame()
-
-        this.gameStartedAt = Date.now()
-        this.status = 'running'
-        console.log('Game Session started.')
+      }
     }
 
+    start() {
+      if (this.status === 'running') {
+         console.warn('Game is already running. Ignoring start call.')
+         return
+      }
+
+      this.setupGame()
+      this.gameStartedAt = Date.now()
+      this.status = 'running'
+      console.log('Game Session started.')
+    }
+  
     setupGame() {
       console.log('Setting up game...')
     }
@@ -361,5 +429,35 @@ export default class Game {
 
          await this.room.currentGameSession.start()
       }
+    }
+
+    trackBookRoomTime() {
+      if(!this.book_room_until) return
+
+      const warningTime = 6 * 60 * 1000 // 6-minutes before timeout
+      const checkInterval = 30 * 1000  // check every 30 seconds
+
+      const bookRoomTime = new Date(this.book_room_until + 'Z').getTime()
+
+      this.bookRoomInterval = setInterval(() => {
+         const now = Date.now()
+         const timeLeft = bookRoomTime - now
+
+         if (timeLeft <= 0) {
+            clearInterval(this.bookRoomInterval)
+            console.warn(`Time is up.`)
+            this.room.socket.broadcastMessage('monitor', {
+               type: 'bookRoomExpired',
+               message: 'Time is up! Please exit or extend your session.'
+            })
+            this.endAndExit()
+         } else if (timeLeft <= warningTime) {
+            console.warn(`WARNING: You have ${Math.ceil(timeLeft / 60000)} minutes lefts.`)
+            this.room.socket.broadcastMessage('monitor', {
+               type: 'bookRoomWarning',
+               message: `Time is almost up! You have ${Math.ceil(timeLeft / 60000)} minutes lefts.`
+            })
+         }
+      }, checkInterval)
     }
 }

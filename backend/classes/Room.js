@@ -25,12 +25,12 @@ dotenv.config()
 
 export default class Room {
     constructor() {
-        this.socket = new Socket(8081)
+        this.socket = new Socket(8082)
         this.gameManager = new GameManager()
         this.currentGame = null // Track current game
 
         this.enabled = true // Enabling/Disabling the Room
-        this.isFree = true  
+        this._isFree = true  
         this.currentGameSession = undefined
 
         this.width
@@ -57,7 +57,7 @@ export default class Room {
             const configData = await fs.promises.readFile(CONFIG_PATH, 'utf8')
             this.config = JSON.parse(configData)
             this.type = this.config.roomType || 'MonkeyRun'
-            console.log(`Room initialized with type: ${this.type}`)
+            console.log(`Room initialized with type: ${this.type} \n`)
         } catch (error) {
             console.error(`Error loading config: ${error.message}`)
             this.config = {}
@@ -67,7 +67,6 @@ export default class Room {
         await this.prepareLights()
         await this.measure()
         this.startServer()
-
         this.setupWebSocketListeners()
     }
 
@@ -99,7 +98,7 @@ export default class Room {
             const configurations = JSON.parse(lightsData)
         
             // Get the corresponding configuration for the given type
-            const matrices = configurations[this.type] || [];
+            const matrices = configurations[this.type] || []
 
             if (matrices.length === 0) {
                 console.warn(`No light configurations for this room: ${this.type}`)
@@ -107,10 +106,10 @@ export default class Room {
         
             // Apply the configurations
             matrices.forEach(({ x, y, shape, type, w, h, cols, rows, spacingX, spacingY, label, active }) => {
-                this.addMatrix(x, y, shape, type, w, h, cols, rows, spacingX, spacingY, label, active);
-            });
+                this.addMatrix(x, y, shape, type, w, h, cols, rows, spacingX, spacingY, label, active)
+            })
 
-            console.log(`Loaded ${matrices.length} light configurations for type: ${this.type}`);
+            // console.log(`Loaded ${matrices.length} light configurations for type: ${this.type}`)
         } catch (error) {
             console.error(`Error loading lights config: ${error.message}`)
         }
@@ -181,7 +180,7 @@ export default class Room {
         this.server.use('/api/toggle-room', toggleRoomRoute)
         this.server.use('/api/game-audio', gameAudioRoute)
         this.server.use('/api/room-status', (req, res) => { res.json({enabled: this.enabled})})
-        this.server.get('/api/health', (req, res) => { res.json({status: 'ok', hostname: process.env.HOSTNAME}) }); 
+        this.server.get('/api/health', (req, res) => { res.json({status: 'ok', hostname: process.env.HOSTNAME}) }) 
 
         // Frontend routes
         this.server.get('/get/roomData', (req, res) => {
@@ -200,7 +199,7 @@ export default class Room {
         this.server.listen(serverPort, serverHostname, () => {
             console.log(`Server running at http://${serverHostname}:${serverPort}/`)
             console.log(`Monitor running at http://${serverHostname}:${serverPort}/monitor`)
-            console.log(`Room Screen running at http://${serverHostname}:${serverPort}/room-screen`)
+            console.log(`Room Screen running at http://${serverHostname}:${serverPort}/room-screen \n`)
         })
     }
 
@@ -277,10 +276,27 @@ export default class Room {
     }
 
     async startGame(roomType, rule, level, players, team, book_room_until) {
-        console.log('startGame request: ', { roomType, rule, level, players, team, book_room_until })
+        //console.log('startGame request: ', { roomType, rule, level, players, team, book_room_until })
         if(this.isFree) {
             this.currentGameSession = await this.gameManager.loadGame(roomType, rule, level, players, team, book_room_until, this)
+         
+            if (this.currentGameSession) {
+               this.currentGame = this.currentGameSession
+            }
          }
+    }
+
+    get isFree() {
+      return this._isFree
+    }
+
+    set isFree(value) {
+      if (this._isFree !== value) {
+         this._isFree = value
+         if (value === true) {
+            this.notifyFacility()
+         }
+      }
     }
 
     async notifyFacility() {
@@ -288,12 +304,12 @@ export default class Room {
         const apiURL = `http://localhost:3001/api/game-room/${gra_id}/available`
 
         try {
-            const response = await axios.post(apiURL, {status: 'available'})
+            const response = await axios.post(apiURL, { available: this.isFree })
             if (response.status === 200) {
                 console.log('Facility notified:', response.data)
             }
         } catch (error) {
-            console.error('Error notifying facility:', error)
+            console.error('Error notifying facility')
         }
     }
 
