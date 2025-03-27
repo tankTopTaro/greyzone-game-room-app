@@ -88,10 +88,14 @@ export default class Basketball extends Game {
          }
          this.reset()
          console.log('Game has been stopped')
-         this.room.socket.broadcastMessage('monitor', {
+
+         const message = {
             type: 'roomDisabled',
             message: 'Room has been disabled.'
-         })
+         }
+
+         this.room.socket.broadcastMessage('monitor', message)
+         this.room.socket.broadcastMessage('room-screen', message)
       }
     }
 
@@ -100,10 +104,13 @@ export default class Basketball extends Game {
          const currentColor = colorsSequence[this.currentColorIndex]
          console.log('Showing color:', currentColor.name)
          
-         this.room.socket.broadcastMessage('monitor', {
+         const message = {
             type: 'colorNames',
             'cache-audio-file-and-play': currentColor.name
-         })
+         }
+         
+         this.room.socket.broadcastMessage('monitor', message)
+         this.room.socket.broadcastMessage('room-screen', message)
 
          this.room.lightGroups.wallButtons.forEach((light) => {
             light.color = colorsSequence[this.currentColorIndex].rgb
@@ -120,9 +127,9 @@ export default class Basketball extends Game {
                   light.color = shuffledColors[i].rgb
                })
 
-               this.room.socket.broadcastMessage('monitor', {
-                  type: 'colorNamesEnd'
-               })
+               this.room.socket.broadcastMessage('monitor', { type: 'colorNamesEnd' })
+
+               this.room.socket.broadcastMessage('room-screen', { type: 'colorNamesEnd' })
             }, 1000)
          }
       }, 1000)
@@ -154,6 +161,8 @@ export default class Basketball extends Game {
     }
 
     handleGameSpecificLightAction(clickedLight, whileColorWas) {
+      if (this.isWaitingForChoiceButton) return 
+      
       const ruleHandlers = {
           1: () => {
               if (this.room.lightGroups.wallButtons.includes(clickedLight)) {
@@ -199,6 +208,7 @@ export default class Basketball extends Game {
             type: 'playerFailed',
         }
         this.room.socket.broadcastMessage('monitor', message)
+        this.room.socket.broadcastMessage('room-screen', message)
     }
 
     broadcastSuccess() {
@@ -207,6 +217,7 @@ export default class Basketball extends Game {
             'cache-audio-file-and-play': 'playerScored'
         }
         this.room.socket.broadcastMessage('monitor', message)
+        this.room.socket.broadcastMessage('room-screen', message)
     }
 
     endGame() {
@@ -216,6 +227,7 @@ export default class Basketball extends Game {
         }
 
         this.room.socket.broadcastMessage('monitor', message)
+        this.room.socket.broadcastMessage('room-screen', message)
 
         this.endAndExit()
     }

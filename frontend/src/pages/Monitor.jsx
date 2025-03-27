@@ -78,6 +78,15 @@ const Monitor = () => {
             })
       })
     }
+    
+    const prefetchImages = (players) => {
+      players.forEach((player) => {
+         if (player.id) {
+            const img = new Image()
+            img.src = `https://greyzone-central-server-app.onrender.com/api/images/players/${player.id}.jpg`
+         }
+      })
+   }
 
     const handleCanvasClick = (ev) => {
       const canvas = canvasRef.current
@@ -216,77 +225,102 @@ const Monitor = () => {
       })
     }
 
+    const handleWebSocketMessage = (data) => {
+      const messageHandlers = {
+         'bookRoomExpired': () => console.log(data),
+         'bookRoomWarning': () => console.log(data),
+          'colorNames': () => {
+             console.log(data)
+             //playAudio(data['cache-audio-file-and-play'])
+          },
+          'colorNamesEnd': () => {
+             console.log(data)
+             wsService.current.send({
+                type: 'colorNamesEnd'
+             })
+          },
+          'endAndExit': () => {
+            setPlayers([])
+            setTeam({})
+            setLifes(0)
+            setPrepTime(15)
+            setCountdown(0)
+            setStatus('')
+            setRoomInfo('')
+            setBookRoomUntil('')
+          },
+          'levelCompleted': () => {
+             console.log(data.message)
+             setStatus(data.message)
+             //playAudio(data['cache-audio-file-and-play'])
+          },
+          'levelFailed': () => {
+             console.log(data.message)
+             setStatus(data.message)
+             //playAudio(data['cache-audio-file-and-play'])
+             setTimeout(() => {
+                setStatus('')
+                setCountdown(0)
+                setLifes(0)
+             })
+          },
+          'newLevelStarts': () => {
+             setCountdown(data.countdown)
+             setLifes(data.lifes)
+             setRoomInfo(`${data.roomType} | Rule ${data.rule} Level ${data.level}`)
+             setPlayers(data.players)
+             setTeam(data.team || '')
+             setBookRoomUntil(formatDate(data.bookRoomUntil))
+
+             if (Array.isArray(data.players) && data.players.length > 0) {
+               prefetchImages(data.players)
+             }
+          },
+          'offerNextLevel': () => console.log(data.message),
+          'offerSameLevel': () => console.log(data.message),
+          'playerSuccess': () => {
+             //playAudio(data['cache-audio-file-and-play'])
+          },
+          'playerFailed': () => console.log('playerFailed'),
+          'roomDisabled': () => console.log(data.message),
+          'storedGameStates': () => {
+               const state = data.data
+               setPlayers(state.players)
+               setTeam(state.team)
+               setRoomInfo(`${state.roomType} | Rule ${state.rule} Level ${state.level}`)
+               setPrepTime(state.prepTime)
+               setCountdown(state.countdown)
+               setLifes(state.lifes)
+               setBookRoomUntil(state.book_room_until)
+          },
+          'timeIsUp': () => console.log(data.message),
+          'updateCountdown': () => {
+             setCountdown(data.countdown)
+          },
+          'updateLifes': () => {
+             setLifes(data.lifes)
+             //playAudio(data['cache-audio-file-and-play'])
+          },
+          'updateLight': () => handleUpdateLight(data),
+          'updatePreparationInterval': () => {
+             setPrepTime(data.countdown)
+             //if (data['cache-audio-file']) preloadAudio(data['cache-audio-file'])
+             
+             //if (data['play-audio-file']) playAudio(data['play-audio-file'])
+          }
+      }
+
+      if (!messageHandlers[data.type]) {console.warn(`No handler for this message type ${data.type}`)}
+
+       messageHandlers[data.type]()
+    }
+
     useEffect(() => {
       document.title = 'GRA | Monitor'
       
       if (!wsService.current) {
         wsService.current = new WebSocketService(WS_URL, CLIENT)
         wsService.current.connect()
-      }
-
-      const handleWebSocketMessage = (data) => {
-        const messageHandlers = {
-            'colorNames': () => {
-               console.log(data)
-               playAudio(data['cache-audio-file-and-play'])
-            },
-            'colorNamesEnd': () => {
-               console.log(data)
-               wsService.current.send({
-                  type: 'colorNamesEnd'
-               })
-            },
-            'levelCompleted': () => {
-               console.log(data.message)
-               setStatus(data.message)
-               playAudio(data['cache-audio-file-and-play'])
-            },
-            'levelFailed': () => {
-               console.log(data.message)
-               setStatus(data.message)
-               playAudio(data['cache-audio-file-and-play'])
-               setTimeout(() => {
-                  setStatus('')
-                  setCountdown('00:00')
-                  setLifes(0)
-               })
-            },
-            'newLevelStarts': () => {
-               setCountdown(data.countdown)
-               setLifes(data.lifes)
-               setRoomInfo(`${data.roomType} | Rule ${data.rule} Level ${data.level}`)
-               setPlayers(data.players)
-               setTeam(data.team || '')
-               setBookRoomUntil(formatDate(data.bookRoomUntil))
-            },
-            'offerNextLevel': () => console.log(data.message),
-            'offerSameLevel': () => console.log(data.message),
-            'playerSuccess': () => {
-               playAudio(data['cache-audio-file-and-play'])
-            },
-            'playerFailed': () => console.log('playerFailed'),
-            'roomDisabled': () => console.log(data.message),
-            'timeIsUp': () => console.log(data.message),
-            'updateCountdown': () => {
-               setCountdown(data.countdown)
-            },
-            'updateLifes': () => {
-               setLifes(data.lifes)
-               playAudio(data['cache-audio-file-and-play'])
-            },
-            'updateLight': () => handleUpdateLight(data),
-            'updatePreparationInterval': () => {
-               setPrepTime(data.countdown)
-               console.log(data)
-               if (data['cache-audio-file']) preloadAudio(data['cache-audio-file'])
-               
-               if (data['play-audio-file']) playAudio(data['play-audio-file'])
-            }
-        }
-
-        if (!messageHandlers[data.type]) {console.warn(`No handler for this message type ${data.type}`)}
-
-         messageHandlers[data.type]()
       }
 
       wsService.current.addListener(handleWebSocketMessage)

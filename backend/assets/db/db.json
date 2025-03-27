@@ -1,0 +1,11 @@
+{
+   team,
+   players,
+   roomType,
+   rule,
+   level,
+   book_room_until,
+   countdown,
+   lifes,
+   prepTime
+}

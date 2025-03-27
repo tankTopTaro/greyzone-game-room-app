@@ -7,7 +7,7 @@ const App = () => {
     <Routes>
       <Route path="/" element={<Monitor />} />
       <Route path="/monitor" element={<Navigate to='/' replace />} />
-      <Route path="/room" element={<Room />} />
+      <Route path="/room-screen" element={<Room />} />
     </Routes>
   )
 }

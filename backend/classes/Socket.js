@@ -1,5 +1,13 @@
+import fs from 'fs'
+import path from 'path'
 import { WebSocketServer } from "ws"
 import { EventEmitter } from "events"
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+const GAME_STATES_PATH = path.join(__dirname, '../assets/db/game_states.json')
 
 export default class Socket extends EventEmitter {
     constructor(port) {
@@ -33,6 +41,9 @@ export default class Socket extends EventEmitter {
                         this.clientByName[clientName].add(client)
 
                         console.log(`Client registered under name: ${clientName}`)
+
+                        // Send stored game states to the client
+                        this.sendStoredGameStates(client)
 
                         // Handle messages from this client
                         client.on('message', (message) => {
@@ -79,5 +90,23 @@ export default class Socket extends EventEmitter {
 
     onClientMessage(clientname, callback) {
         this.on(clientname, callback)
+    }
+
+    sendStoredGameStates(client) {
+         if (fs.existsSync(GAME_STATES_PATH)) {
+            try {
+               const gameStates = JSON.parse(fs.readFileSync(GAME_STATES_PATH, 'utf8'))
+
+               if (gameStates && Object.keys(gameStates).length > 0) {
+                  client.send(JSON.stringify({
+                     type: 'storedGameStates',
+                     data: gameStates
+                  }))
+                  console.log('Sent stored game states to client')
+               }
+            } catch (error) {
+               console.error('Error reading file:', error)
+            }
+         }
     }
 }

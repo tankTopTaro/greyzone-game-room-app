@@ -67,10 +67,13 @@ export default class DoubleGrid extends Game {
          this.running = false
          this.reset()
          console.log('Game has been stopped')
-         this.room.socket.broadcastMessage('monitor', {
+         const message = {
             type: 'roomDisabled',
             message: 'Room has been disabled.'
-         })
+         }
+         
+         this.room.socket.broadcastMessage('monitor', message)
+         this.room.socket.broadcastMessage('room-screen', message)
       }
     }
 
@@ -94,22 +97,24 @@ export default class DoubleGrid extends Game {
     }
 
     handleGameSpecificLightAction(clickedLight, whileColorWas) {
-        const ruleHandlers = {
-            1: () => {
-                if (this.room.lightGroups['mainFloor'].includes(clickedLight)) {
-                    this.handleMainFloorClick(clickedLight, whileColorWas)
-                } else if (this.room.lightGroups['wallButtons'].includes(clickedLight)) {
-                    this.handleWallButtonClick(clickedLight)
-                }
-            },
-        }
+      if (this.isWaitingForChoiceButton) return
 
-       if(!ruleHandlers[this.rule]) {
-            console.warn(`No handlers for this rule ${this.rule}`)
-       }
+      const ruleHandlers = {
+         1: () => {
+               if (this.room.lightGroups['mainFloor'].includes(clickedLight)) {
+                  this.handleMainFloorClick(clickedLight, whileColorWas)
+               } else if (this.room.lightGroups['wallButtons'].includes(clickedLight)) {
+                  this.handleWallButtonClick(clickedLight)
+               }
+         },
+      }
 
-        //console.log(`TEST from DoubleGrid: lightId: ${clickedLight}, whileColorWas: ${whileColorWas}`)
-        ruleHandlers[this.rule]()
+      if(!ruleHandlers[this.rule]) {
+         console.warn(`No handlers for this rule ${this.rule}`)
+      }
+
+      //console.log(`TEST from DoubleGrid: lightId: ${clickedLight}, whileColorWas: ${whileColorWas}`)
+      ruleHandlers[this.rule]()
     }
 
     handleMainFloorClick(clickedLight, whileColorWas) {
@@ -170,6 +175,7 @@ export default class DoubleGrid extends Game {
             type: 'playerFailed',
         }
         this.room.socket.broadcastMessage('monitor', message)
+        this.room.socket.broadcastMessage('room-screen', message)
     }
 
     broadcastSuccess() {
@@ -178,6 +184,7 @@ export default class DoubleGrid extends Game {
             'cache-audio-file-and-play': 'playerScored'
         }
         this.room.socket.broadcastMessage('monitor', message)
+        this.room.socket.broadcastMessage('room-screen', message)
     }
 
     endGame() {
@@ -187,6 +194,7 @@ export default class DoubleGrid extends Game {
         }
 
         this.room.socket.broadcastMessage('monitor', message)
+        this.room.socket.broadcastMessage('room-screen', message)
 
         this.endAndExit()
     }
