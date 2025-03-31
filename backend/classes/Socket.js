@@ -19,6 +19,7 @@ export default class Socket extends EventEmitter {
     }
 
     init() {
+      console.log('Socket initialized...')
         const host = process.env.HOSTNAME || '0.0.0.0'
         this.socket = new WebSocketServer({ port: this.port, host: host })
 
@@ -66,6 +67,7 @@ export default class Socket extends EventEmitter {
     }
 
     broadcastMessage(clientname, message) {
+      // console.log(`Broadcasting ${JSON.stringify(message)} to ${clientname}`)
         if (this.clientByName[clientname]) {
             this.clientByName[clientname].forEach(client => {
                 if (client.readyState === 1) {

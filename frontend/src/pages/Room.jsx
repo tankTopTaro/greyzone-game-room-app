@@ -8,13 +8,15 @@ const WS_URL = 'ws://localhost:8082'
 const CLIENT = 'room-screen'
 
 const Room = () => {
-   const [prepTime, setPrepTime] = useState(15)
-   const [countdown, setCountdown] = useState(0)
+   const [prepTime, setPrepTime] = useState(null)
+   const [countdown, setCountdown] = useState(null)
    const [lifes, setLifes] = useState(0)
    const [heartLoss, setHeartLoss] = useState(false)
    const [status, setStatus] = useState("")
    const [roomInfo, setRoomInfo] = useState("")
+   const [roomType, setRoomType] = useState("")
    const [bookRoomUntil, setBookRoomUntil] = useState("")
+   const [colors, setColors] = useState([])
    const [players, setPlayers] = useState([])
    const [team, setTeam] = useState({})
 
@@ -34,6 +36,130 @@ const Room = () => {
                               <path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572" />
                               <path d="M12 6l-2 4l4 3l-2 4v3" />
                            </svg>)
+
+   const handleWebSocketMessage = (data) => {
+      console.log('Received data: ', data)
+      const messageHandlers = {
+         'bookRoomExpired': () => setStatus(data.message),
+         'bookRoomWarning': () => setStatus(data.message),
+         'colorNames': () => {
+            playAudio(data['cache-audio-file-and-play'])
+         },
+         'colorNamesEnd': () => {
+            wsService.current.send({
+               type: 'colorNamesEnd'
+            })
+         },
+         'endAndExit': () => {
+            console.log(data)
+            setPlayers([])
+            setColors([])
+            setTeam({})
+            setLifes(0)
+            setPrepTime(15)
+            setCountdown(0)
+            setStatus('')
+            setRoomInfo('')
+            setRoomType('')
+            setBookRoomUntil('')
+         },
+         'levelCompleted': () => {
+            setStatus(data.message)
+            playAudio(data['cache-audio-file-and-play'])
+         },
+         'levelFailed': () => {
+            setStatus(data.message)
+            playAudio(data['cache-audio-file-and-play'])
+         },
+         'newLevelStarts': () => {
+            setCountdown(data.countdown)
+            setLifes(data.lifes)
+            setRoomInfo(`Level ${data.level}`)
+            setRoomType(data.roomType)
+            setPlayers(data.players)
+            setTeam(data.team || '')
+            setBookRoomUntil(formatDate(data.bookRoomUntil))
+            setColors([])
+         },
+         'offerNextLevel': () => setStatus(data.message),
+         'offerSameLevel': () => setStatus(data.message),
+         'playerSuccess': () => {
+            playAudio(data['cache-audio-file-and-play'])
+            addColor(data.color)
+         },
+         'playerFailed': () => addColor(data.color),
+         'roomDisabled': () => setStatus(data.message),
+         'storedGameStates': () => {
+            const state = data.data
+            setPlayers(state.players)
+            setTeam(state.team)
+            setRoomInfo(`Level ${state.level}`)
+            setRoomType(state.roomType)
+            setPrepTime(state.prepTime)
+            setCountdown(state.countdown)
+            setLifes(state.lifes)
+            setBookRoomUntil(state.book_room_until)
+         },
+         'timeIsUp': () => setStatus(data.message),
+         'updateCountdown': () => {
+            setCountdown(data.countdown)
+         },
+         'updateLifes': () => {
+            playAudio(data['cache-audio-file-and-play'])
+
+            if (data.lifes < lifes) {
+               setHeartLoss(true)
+               setTimeout(() => {
+                  setLifes(data.lifes)
+                  setHeartLoss(false)
+               }, 500)
+            } else {
+               setLifes(data.lifes)
+            }
+         },
+         'updatePreparationInterval': () => {
+            setPrepTime(data.countdown)
+            if (data['cache-audio-file']) preloadAudio(data['cache-audio-file'])
+            
+            if (data['play-audio-file']) playAudio(data['play-audio-file'])
+         }
+      }
+
+      if (!messageHandlers[data.type]) {console.warn(`No handler for this message type ${data.type}`)}
+
+      messageHandlers[data.type]()
+   }
+
+   useEffect(() => {
+      document.title = 'GRA | Room'
+      
+      if (!wsService.current) {
+         wsService.current = new WebSocketService(WS_URL, CLIENT)
+         wsService.current.connect()
+         console.log('WebSocket connected')
+      }
+
+      wsService.current.addListener(handleWebSocketMessage)
+
+      return () => {
+         console.log('Cleaning up WebSocket')
+         if (wsService.current) {
+            wsService.current.removeListener(handleWebSocketMessage)
+            wsService.current.close()
+            wsService.current = null
+         }
+      }
+   }, [])
+
+   const addColor = (newColor) => {
+      if (!newColor || (Array.isArray(newColor) && newColor.every((val) => val === 0))) return
+
+      setColors((prevColors) => {
+         if (prevColors.length >=6) return [newColor]
+
+         return [...prevColors, newColor]
+      })
+   }
 
    const preloadAudio = async (audioName) => {
       if (audioCache.current.has(audioName)) return   // Already cached
@@ -81,113 +207,19 @@ const Room = () => {
       })
    }
 
-   const prefetchImages = (players) => {
-      players.forEach((player) => {
-         if (player.id) {
-            const img = new Image()
-            img.src = `https://greyzone-central-server-app.onrender.com/api/images/players/${player.id}.jpg`
-         }
-      })
-   }
+   const getPlayerImageUrl = async (playerId) => {
+      const facilityUrl = `https://localhost:3001/api/images/players/${playerId}.jpg`
+      const centralUrl = `https://greyzone-central-server-app.onrender.com/api/images/players/${playerId}.jpg`
 
-   /** WebSocket methods */
-   const handleWebSocketMessage = (data) => {
-      const messageHandlers = {
-          'bookRoomExpired': () => console.log(data),
-          'bookRoomWarning': () => console.log(data),
-          'colorNames': () => {
-             console.log(data)
-             playAudio(data['cache-audio-file-and-play'])
-          },
-          'colorNamesEnd': () => {
-             console.log(data)
-             wsService.current.send({
-                type: 'colorNamesEnd'
-             })
-          },
-          'endAndExit': () => {
-            setPlayers([])
-            setTeam({})
-            setLifes(0)
-            setPrepTime(15)
-            setCountdown(0)
-            setStatus('')
-            setRoomInfo('')
-            setBookRoomUntil('')
-          },
-          'levelCompleted': () => {
-             console.log(data.message)
-             setStatus(data.message)
-             playAudio(data['cache-audio-file-and-play'])
-          },
-          'levelFailed': () => {
-             console.log(data.message)
-             setStatus(data.message)
-             playAudio(data['cache-audio-file-and-play'])
-             setTimeout(() => {
-                setStatus('')
-                setCountdown(0)
-                setLifes(0)
-             })
-          },
-          'newLevelStarts': () => {
-             setCountdown(data.countdown)
-             setLifes(data.lifes)
-             setRoomInfo(`Level ${data.level}`)
-             setPlayers(data.players)
-             setTeam(data.team || '')
-             setBookRoomUntil(formatDate(data.bookRoomUntil))
-
-             if (Array.isArray(data.players) && data.players.length > 0) {
-               prefetchImages(data.players)
-             }
-          },
-          'offerNextLevel': () => console.log(data.message),
-          'offerSameLevel': () => console.log(data.message),
-          'playerSuccess': () => {
-             playAudio(data['cache-audio-file-and-play'])
-          },
-          'playerFailed': () => console.log('playerFailed'),
-          'roomDisabled': () => console.log(data.message),
-          'storedGameStates': () => {
-            const state = data.data
-            setPlayers(state.players)
-            setTeam(state.team)
-            setRoomInfo(`Level ${state.level}`)
-            setPrepTime(state.prepTime)
-            setCountdown(state.countdown)
-            setLifes(state.lifes)
-            setBookRoomUntil(state.book_room_until)
-         },
-          'timeIsUp': () => console.log(data.message),
-          'updateCountdown': () => {
-             setCountdown(data.countdown)
-          },
-          'updateLifes': () => {
-            playAudio(data['cache-audio-file-and-play'])
-
-            if (data.lifes < lifes) {
-               setHeartLoss(true)
-               setTimeout(() => {
-                  setLifes(data.lifes)
-                  setHeartLoss(false)
-               }, 500)
-            } else {
-               setLifes(data.lifes)
-            }
-          },
-          'updatePreparationInterval': () => {
-             setPrepTime(data.countdown)
-             if (data['cache-audio-file']) preloadAudio(data['cache-audio-file'])
-             
-             if (data['play-audio-file']) playAudio(data['play-audio-file'])
-          }
+      try {
+         const response = await fetch(facilityUrl, { method: 'HEAD' })
+         if (response.ok) return facilityUrl
+      } catch (error) {
+         // If facility image is not available, fallback to central server
       }
 
-      if (!messageHandlers[data.type]) {console.warn(`No handler for this message type ${data.type}`)}
-
-       messageHandlers[data.type]()
-   }
+      return centralUrl
+    }
 
    const formatTime = (seconds) => { 
       const minutes = Math.floor(seconds / 60)
@@ -211,27 +243,19 @@ const Room = () => {
    }
 
    useEffect(() => {
-      document.title = 'GRA | Room'
-      
-      if (!wsService.current) {
-         wsService.current = new WebSocketService(WS_URL, CLIENT)
-         wsService.current.connect()
-         console.log('WebSocket connected')
-      }
-
-      wsService.current.addListener(handleWebSocketMessage)
-
-      wsService.current.send({ type: 'subscribe' })
-
-      return () => {
-         console.log('Cleaning up WebSocket')
-         if (wsService.current) {
-            wsService.current.removeListener(handleWebSocketMessage)
-            wsService.current.close()
-            wsService.current = null
+      const prefetchImages = async () => {
+         for (const player of players) {
+            if (player.id) {
+               const img = new Image()
+               img.src = await getPlayerImageUrl(player.id)
+            }
          }
       }
-   }, [])
+
+      if (players.length > 0) {
+         prefetchImages()
+      }
+   }, [players])
 
   return (
    <div id="room" className="container d-flex flex-column align-items-center justify-content-center text-white">
@@ -262,62 +286,55 @@ const Room = () => {
                   id="score-container"
                   className="d-flex flex-column align-items-center justify-content-center flex-grow-1 py-4"
                >
-                  <div id="color-sequence" className="d-flex invisible cursor-none justify-content-center gap-2 mb-3" style={{cursor: 'none'}}>
-                        <span
-                           className="rounded-circle border border-2 border-white d-flex align-items-center justify-content-center"
-                           style={{width: '40px', height: '40px', cursor: 'none'}}
-                        ></span>
-                        <span
-                           className="rounded-circle border border-2 border-white d-flex align-items-center justify-content-center"
-                           style={{width: '40px', height: '40px', cursor: 'none'}}
-                        ></span>
-                        <span
-                           className="rounded-circle border border-2 border-white d-flex align-items-center justify-content-center"
-                           style={{width: '40px', height: '40px', cursor: 'none'}}
-                        >                
-                        </span>
-                        <span
-                           className="rounded-circle border border-2 border-white d-flex align-items-center justify-content-center"
-                           style={{width: '40px', height: '40px', cursor: 'none'}}
-                        ></span>
-                        <span
-                           className="rounded-circle border border-2 border-white d-flex align-items-center justify-content-center"
-                           style={{width: '40px', height: '40px', cursor: 'none'}}
-                        ></span>
-                        <span
-                           className="rounded-circle border border-2 border-white d-flex align-items-center justify-content-center"
-                           style={{width: '40px', height: '40px', cursor: 'none'}}
-                        ></span>
-                  </div>
+                  {roomType === 'basketball' && (
+                     <div id="color-sequence" className={`d-flex cursor-none justify-content-center gap-2 mb-3`} style={{cursor: 'none'}}>
+                        {[...Array(6)].map((_, index) => (
+                           <span
+                              key={index}
+                              className="rounded-circle border border-2 border-white d-flex align-items-center justify-content-center"
+                              style={{
+                                 width: '40px',
+                                 height: '40px',
+                                 cursor: 'none',
+                                 backgroundColor: colors[index] ? `rgb(${colors[index].join(', ')})` : 'transparent'
+                              }}
+                           >
+                           </span>
+                        ))}
+                     </div>
+                  )}
                </div>
             </div>
 
-            <div className="w-100 d-flex flex-column gap-2 align-items-center justify-content-center flex-grow-1">
+            <div className="w-100 d-flex flex-column gap-2 align-items-center justify-content-center flex-grow-1 mb-2">
                <span id="room-info" className="fs-2">{roomInfo}</span>
             </div>
 
             <div className="w-100 d-flex flex-column gap-2 align-items-center justify-content-center flex-grow-1">
-               <h4 className='fs-6'>
+               <h4 className='display-6 mb-2'>
                   {team?.name}
                </h4>
-               <ul id="room-players" className="fs-2 list-unstyled">
-                  {Array.isArray(players) && players.length > 0 ? (
-                     players.map((player, index) => (
-                        <li key={index} className="d-flex align-items-center gap-2 mb-2">
-                           <img 
-                              src={player.id ? `https://greyzone-central-server-app.onrender.com/api/images/players/${player.id}.jpg` : 'https://placehold.co/40x40?text=No+Image'}
-                              alt={player.nick_name || 'Unknown'}
-                              width="40"
-                              height="40"
-                              className="rounded-circle"
-                           />
-                           <span>{player.nick_name ?? 'Unknown'}</span>
-                        </li>
-                     ))
-                  ) : (
-                     <li>No players</li>
-                  )}
-               </ul>
+               {/* Players */}
+               <div className="w-100 d-flex flex-column align-items-center">
+                  <ul id="room-players" className="fs-2 list-unstyled">
+                     {Array.isArray(players) && players.length > 0 ? (
+                        players.map((player, index) => (
+                           <li key={index} id="lists" className="list-item mb-2">
+                              <img 
+                                 src={player.id ? `https://greyzone-central-server-app.onrender.com/api/images/players/${player.id}.jpg` : 'https://placehold.co/40x40?text=No+Image'}
+                                 alt={player.nick_name || 'Unknown'}
+                                 className="avatar"
+                              />
+                              <div className="d-flex flex-column align-items-start">
+                                 <span>{player.nick_name ?? 'Unknown'}</span>
+                              </div>
+                           </li>
+                        ))
+                     ) : (
+                        <li>No players</li>
+                     )}
+                  </ul>
+               </div>
             </div>
       </div>  
       

@@ -5,9 +5,7 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-const DB_DIR = path.join(__dirname, '../assets/db')
-const GAME_SESSION_DIR = path.join(DB_DIR, 'game_sessions')
-const CURRENT_SESSION_FILE = path.join(DB_DIR, 'current_session.json')
+const GAME_STATES_PATH = path.join(__dirname, '../assets/db/game_states.json')
 
 let roomInstance = null
 
@@ -17,7 +15,7 @@ const startGameSessionController = {
     },
 
     startGame: async (req, res) => {
-        const { team, players, room, book_room_until } = req.body
+        const { team, players, room, book_room_until, is_collaborative } = req.body
 
         if (!room || !players) {
             return res.status(400).json({ error: 'Missing data'})
@@ -35,7 +33,7 @@ const startGameSessionController = {
         }
 
         // Start the session
-        await roomInstance.startGame(roomType, rule, level, players, team, book_room_until)
+        await roomInstance.startGame(roomType, rule, level, players, team, book_room_until, is_collaborative)
 
         res.json({ message: `Game started in ${roomType} with rule: ${rule}, level: ${level}` })
     }

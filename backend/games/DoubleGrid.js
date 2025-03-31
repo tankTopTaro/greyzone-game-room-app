@@ -7,7 +7,7 @@ const black = hsvToRgb([0,0,0])
 
 export default class DoubleGrid extends Game {
     constructor (players, rule, level, team, book_room_until, env, roomInstance) {
-        super(players, rule, level, team, book_room_until, env, roomInstance, 60, 15)
+        super(players, rule, level, team, book_room_until, env, roomInstance, 60)
         this.running = false
       }
 
@@ -151,7 +151,7 @@ export default class DoubleGrid extends Game {
 
     handleIncorrectButtonClick() {
         this.removeLife()
-        this.broadcastFailure()
+        // this.broadcastFailure()
     }
 
     createShape(clickedLight) {

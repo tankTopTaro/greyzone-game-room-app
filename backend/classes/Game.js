@@ -1,4 +1,5 @@
 import path from 'path'
+import axios from 'axios'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
 
@@ -16,15 +17,15 @@ const green = hsvToRgb([85,255,255])
 const red = hsvToRgb([0,255,255])
 
 export default class Game {
-    constructor(rule, level, players = [], team, book_room_until, env, roomInstance, timeForLevel = 60, timeToPrepare = 15) {
+    constructor(rule, level, players = [], team, book_room_until, is_collaborative = true, roomInstance, timeForLevel = 60, timeToPrepare) {
       this.players = players
       this.rule = rule
       this.level = level
       this.team = team
       this.book_room_until = book_room_until
-      this.env = env
       this.room = roomInstance
       this.timeForLevel = timeForLevel
+      this.is_collaborative = is_collaborative
 
       this.animationMetronome = undefined
       this.shapes = []
@@ -33,8 +34,9 @@ export default class Game {
       this.lastLevelStartedAt = undefined
       this.lastLevelCreatedAt = Date.now()
       this.createdAt = Date.now()
-
-      this.timeToPrepare = timeToPrepare
+      
+      this.timeToPrepare = timeToPrepare ?? 15
+      console.log('timeToPrepare:', timeToPrepare)
       this.preparationInterval = undefined
       this.preparationIntervalStartedAt = undefined
 
@@ -44,6 +46,9 @@ export default class Game {
       this.isChoiceButtonPressed = false
       this.roomMessage = ''
       this.currentLevelOffer = ''
+      this.log = []
+      this.isWon = false
+      this.score = 0 
     }
 
     async init() {
@@ -56,6 +61,8 @@ export default class Game {
             })
             .catch((e) => {
                 console.log('CATCH: prepareAndGreet() failed')
+                this.logEvent('prepareAndGreet_failed', e.message || e)
+
                 console.log(e)
                 this.room.currentGameSession = undefined
                 console.log('Game session cancelled.')
@@ -85,6 +92,9 @@ export default class Game {
         
         this.status = undefined
         this.shapes = []
+        this.log = []
+        this.isWon = false
+        this.score = 0
         this.lastLevelCreatedAt = Date.now()
         this.room.lights.forEach(light => {
             light.color = black
@@ -177,7 +187,9 @@ export default class Game {
             const levelConfig = configurations[this.level]
 
             if (!levelConfig) {
-                console.warn(`Invalid level: ${this.level}`)
+               const msg = `Invalid level: ${this.level}`
+               console.warn(msg)
+               this.logEvent('invalid_level', msg)
             }
 
             // create shapes
@@ -202,6 +214,7 @@ export default class Game {
             // console.log(`Loaded shapes configurations for type: ${this.room.type}`)
         } catch (error) {
             console.error(`Error loading shapes config: ${error.message}`)
+            this.logEvent('load_shapes_failed', error.message)
         }
     }
 
@@ -300,9 +313,24 @@ export default class Game {
     levelCompleted() {
       clearInterval(this.animationMetronome)
 
+      // Track book_room_until
       const now = Date.now();
       const bookRoomTime = this.book_room_until ? new Date(this.book_room_until).getTime() : 0;
 
+      // Calculate the time taken to complete the level
+      const timeTaken = Math.round((now - this.lastLevelStartedAt) / 1000)
+      const levelKey = `${this.room.type} > ${this.rule} > L${this.level}`
+
+      // Calculate the score
+      this.score = Math.max(1000 - (timeTaken * 2), 100)
+
+      // Update team and player games_history
+      this.updateGamesHistory(this.team, levelKey, timeTaken)
+      this.players.forEach(player => this.updateGamesHistory(player, levelKey, timeTaken))
+
+      this.isWon = true
+
+      // Send message to clients
       const message = {
          type: 'levelCompleted',
          message: 'Player Wins',
@@ -311,6 +339,9 @@ export default class Game {
 
       this.room.socket.broadcastMessage('monitor', message)
       this.room.socket.broadcastMessage('room-screen', message)
+
+      // Submit finished game session
+      this.submitFinishedGameSession()
        
       if (bookRoomTime > now) {
          this.offerNextLevel()
@@ -333,6 +364,9 @@ export default class Game {
 
       this.room.socket.broadcastMessage('monitor', message)
       this.room.socket.broadcastMessage('room-screen', message)
+
+      // Submit the session even when the level fails
+      this.submitFinishedGameSession()
 
       if (bookRoomTime > now) {
          this.offerSameLevel();
@@ -358,13 +392,24 @@ export default class Game {
 
     offerNextLevel() {
       this.isWaitingForChoiceButton = true
-      this.currentLevelOffer = 'next'
-      this.startChoiceButtons(green)
 
-      const message = {
-         type: 'offerNextLevel',
-         message: 'Game Over! Press Green Button to proceed to next level, press Red Button to leave the room.'
-      }
+      // Check if it's the last level
+      const currentLevel = parseInt(this.level, 10)
+      const isLastLevel = currentLevel >= this.room.numberOfLevels
+       
+      const buttonColor = isLastLevel ? yellow : green
+      const message = isLastLevel 
+      ? {
+            type: 'offerNextLevel',
+            message: 'This is the last level! Press Yellow button to play again, press Red Button to leave the room.'
+        } 
+      : {
+            type: 'offerNextLevel',
+            message: 'Game Over! Press Green Button to proceed to next level, press Red Button to leave the room.'
+        }
+
+      this.currentLevelOffer = isLastLevel ? 'same' :  'next'
+      this.startChoiceButtons(buttonColor)
 
       this.room.socket.broadcastMessage('monitor', message)
       this.room.socket.broadcastMessage('room-screen', message)
@@ -373,9 +418,31 @@ export default class Game {
     async startSameLevel() {
       this.reset()
       this.isChoiceButtonPressed = false
-      this.timeToPrepare = 0
-      await this.prepare()
-      this.start()
+
+      this.gameLogEvent( this.team, 'start_same_level', `Team replay level ${this.level}`)
+      this.players.forEach(player => this.gameLogEvent(player, 'start_same_level', `player replay level ${this.level}`))
+
+      // Create a new session
+      this.room.currentGameSession = await this.room.gameManager.loadGame(
+         this.room,
+         this.room.type,
+         this.rule, 
+         this.level, 
+         this.players, 
+         this.team,
+         this.book_room_until,
+         this.is_collaborative,
+         5 // timeToPrepare, from 15 to 5
+      )
+
+      if (!this.room.currentGameSession) {
+         this.logEvent('same_level_failed', 'Failed to load same level.')
+         return
+      }
+      
+      // this.room.currentGameSession.start()
+      this.gameLogEvent( this.team, 'start_same_level', `Team started replaying level ${this.level}`)
+      this.players.forEach(player => this.gameLogEvent(player, 'start_same_level', `Player started replaying level ${this.level}`))
     }
 
     async startNextLevel() {   
@@ -384,20 +451,37 @@ export default class Game {
       this.isChoiceButtonPressed = false
       this.room.isFree = false
 
+      // Check if it's the last level
+      const currentLevel = parseInt(this.level, 10)
+      const isLastLevel = currentLevel >= this.room.numberOfLevels
+
+      if (isLastLevel) {
+         this.gameLogEvent( this.team, 'last_level_reached', `Team has reached the last level: Level ${this.level}`)
+         this.players.forEach(player => this.gameLogEvent(player, 'start_next_level', `Player has reached the last level: Level ${this.level}`))
+         return 
+      }
+
       // Properly assign the new game session
       this.room.currentGameSession = await this.room.gameManager.loadGame(
+         this.room,
          this.room.type,
          this.rule, 
          parseInt(this.level, 10) + 1, 
          this.players, 
          this.team,
          this.book_room_until,
-         this.room
+         this.is_collaborative,
+         5  // timeToPrepare, from 15 to 5
       )
 
-      if (this.room.currentGameSession) {
-         this.room.currentGameSession.start()
-      }      
+      if (!this.room.currentGameSession) {
+         this.logEvent('next_level_failed', 'Failed to load next level.')
+         return
+      }    
+      
+      // this.room.currentGameSession.start()
+      this.gameLogEvent( this.team, 'start_next_level', `Team advanced to level ${this.level}`)
+      this.players.forEach(player => this.gameLogEvent(player, 'start_next_level', `Player advanced to level ${this.level}`))
     }
 
     updateCountdown() {
@@ -427,6 +511,8 @@ export default class Game {
                this.room.socket.broadcastMessage('room-screen', message)
 
                this.levelFailed()
+               this.gameLogEvent( this.team, 'time_is_up', 'Team ran out of time')
+         this.players.forEach(player => this.gameLogEvent(player, 'time_is_up', 'Player ran out of time'))
             }
         }
     }
@@ -455,10 +541,13 @@ export default class Game {
 
       if (this.lifes === 0) {
          this.levelFailed()
+         this.gameLogEvent( this.team, 'no_more_lifes', 'Team ran out of lifes')
+         this.players.forEach(player => this.gameLogEvent(player, 'no_more_lifes', 'Player ran out of lifes'))
       }
     }
 
     updatePreparationInterval() {
+      //console.log('TimeToPrepare:', this.timeToPrepare)
       let timeLeft = Math.round((this.preparationIntervalStartedAt + (this.timeToPrepare * 1000) - Date.now()) / 1000)
 
       if (timeLeft != this.prepTime) {
@@ -514,6 +603,7 @@ export default class Game {
 
     async endAndExit() {
       console.log('Game Ended...')
+      this.submitFinishedGameSession()
       this.room.socket.broadcastMessage('monitor', { type: 'endAndExit' })
       this.room.socket.broadcastMessage('room-screen', { type: 'endAndExit' })
       this.clearGameStates()
@@ -560,6 +650,8 @@ export default class Game {
 
     startChoiceButtons(color) {
       if (this.isWaitingForChoiceButton) {
+
+         this.reset()
 
          this.room.lightGroups.wallButtons[0].color = color
          this.room.lightGroups.wallButtons[1].color = red 
@@ -614,4 +706,75 @@ export default class Game {
           console.log('Game states cleared.')
       }
     }  
+
+    updateGamesHistory(entity, levelKey, timeTaken) {
+      if(!entity.games_history[levelKey]) {
+         entity.games_history[levelKey] = {
+            best_time: timeTaken,
+            played: 1,
+            played_today: 1
+         }
+      } else {
+         const history = entity.games_history[levelKey]
+         const oldBestTime = history.best_time
+         history.best_time = history.best_time === 0 ? timeTaken : Math.min(history.best_time, timeTaken)
+         history.played += 1
+
+         // Log event if new record is set
+         if (history.best_time < oldBestTime) {
+            const entityType = entity === this.team ? "team" : "player"
+
+            this.gameLogEvent(
+               entity, 
+               `new_${entityType}_record`,
+               `New ${entityType} record on ${this.room.type} Level ${this.level}: ${history.best_time} seconds instead of ${oldBestTime}`
+            )
+         }
+
+         // Reset played_today if its a new day
+         const lastPlayedDate = new Date(this.createdAt).toDateString()
+         const today = new Date().toDateString() 
+         history.played_today = lastPlayedDate === today ? history.played_today + 1 : 1
+      }
+    }
+
+    gameLogEvent(entity, type, caption) {
+      if(!entity.events_to_debrief) {
+         entity.events_to_debrief = []
+      } else {
+         entity.events_to_debrief.push({type, caption})
+      }
+    }
+
+    logEvent(event, details) {
+      this.log.push({ event, details })
+    }
+
+    async submitFinishedGameSession() {
+      const gameSessionData = {
+         players: this.players,
+         team: this.team,
+         roomType: this.room.type,
+         gameRule: this.rule,
+         gameLevel: this.level,
+         durationStheory: this.timeForLevel,
+         durationSactual: this.team?.games_history?.best_time ?? this.players.flatMap(player => player.games_history.best_time || 0),
+         isWon: this.isWon,
+         score: this.score,
+         isCollaborative: this.is_collaborative,
+         gameLog: this.team?.events_to_debrief ?? this.players.flatMap(player => player.events_to_debrief || []),
+         log: this.log,
+      };
+   
+      try {
+         const response = await axios.post('http://localhost:3001/api/game-sessions/', gameSessionData);
+   
+         if (response.status === 200) {
+            console.log('Game session uploaded successfully');
+         }
+      } catch (error) {
+         console.error('Error uploading game session:', error.message);
+      }
+   }
+   
 }

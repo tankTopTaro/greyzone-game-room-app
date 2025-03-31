@@ -6,8 +6,8 @@ const blueGreen1 = hsvToRgb([130,220,255])
 const black = hsvToRgb([0,0,0])
 
 export default class Basketball extends Game {
-    constructor (players, rule, level, team, book_room_until, env, roomInstance) {
-        super(players, rule, level, team, book_room_until, env, roomInstance, 25, 15)
+    constructor (players, rule, level, team, book_room_until, env, roomInstance, timeForLevel = 25, timeToPrepare) {
+        super(players, rule, level, team, book_room_until, env, roomInstance, timeForLevel, timeToPrepare)
         this.running = false
         this.showColor = undefined
       }
@@ -183,38 +183,40 @@ export default class Basketball extends Game {
       console.log(clickedLight.color)
       console.log(this.lightColorSequence[0].rgb)
       if (clickedLight.color === this.lightColorSequence[0].rgb) {
-          this.handleCorrectButtonClick()
+          this.handleCorrectButtonClick(clickedLight)
       } else {
-          this.handleIncorrectButtonClick()
+          this.handleIncorrectButtonClick(clickedLight)
       }
     }
 
-    handleCorrectButtonClick() {
+    handleCorrectButtonClick(clickedLight) {
       this.lightColorSequence.splice(0, 1)
-      this.broadcastSuccess()
+      this.broadcastSuccess(clickedLight)
       
       if (this.lightColorSequence.length === 0) {
-          this.startSameLevel()
+          this.levelCompleted()
       }
     }
 
-    handleIncorrectButtonClick() {
-         this.removeLife()
-         this.broadcastFailure()
+    handleIncorrectButtonClick(clickedLight) {
+         this.removeLife(clickedLight)
+         this.broadcastFailure(clickedLight)
     }
 
-    broadcastFailure() {
+    broadcastFailure(clickedLight) {
         const message = {
             type: 'playerFailed',
+            color: clickedLight.color
         }
         this.room.socket.broadcastMessage('monitor', message)
         this.room.socket.broadcastMessage('room-screen', message)
     }
 
-    broadcastSuccess() {
+    broadcastSuccess(clickedLight) {
         const message = {
             type: 'playerSuccess',
-            'cache-audio-file-and-play': 'playerScored'
+            'cache-audio-file-and-play': 'playerScored',
+            color: clickedLight.color
         }
         this.room.socket.broadcastMessage('monitor', message)
         this.room.socket.broadcastMessage('room-screen', message)

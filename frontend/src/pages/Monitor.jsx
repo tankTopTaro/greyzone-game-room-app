@@ -17,21 +17,145 @@ const Monitor = () => {
     const [players, setPlayers] = useState([])
     const [team, setTeam] = useState({})
 
-    const wsService = useRef(null)
-
     const canvasRef = useRef(null)
     const MAX_POINTS = 10
-    const REMOVE_INTERVAL = 1000
+    const REMOVE_INTERVAL = 2000
     const [clickPoints, setClickPoints] = useState([])
 
     const [room, setRoom] = useState(null)
     const [lights, setLights] = useState([])
     const [scale, setScale] = useState(1)
 
-    const [lightsAreDrawn, setLightsAreDrawn] = useState(false)
     const bufferedLightUpdates = useRef([])
 
     const audioCache = useRef(new Map())
+    const wsService = useRef(null)
+
+    const displayedTime = prepTime > 0 ? prepTime : countdown
+
+    const handleWebSocketMessage = (data) => {
+      const messageHandlers = {
+         'bookRoomExpired': () => console.log(data),
+         'bookRoomWarning': () => console.log(data),
+          'colorNames': () => {
+             console.log(data)
+             //playAudio(data['cache-audio-file-and-play'])
+          },
+          'colorNamesEnd': () => {
+             console.log(data)
+             wsService.current.send({
+                type: 'colorNamesEnd'
+             })
+          },
+          'endAndExit': () => {
+            setPlayers([])
+            setTeam({})
+            setLifes(0)
+            setPrepTime(15)
+            setCountdown(0)
+            setStatus('')
+            setRoomInfo('')
+            setBookRoomUntil('')
+          },
+          'levelCompleted': () => {
+             setStatus(data.message)
+             //playAudio(data['cache-audio-file-and-play'])
+          },
+          'levelFailed': () => {
+             setStatus(data.message)
+             //playAudio(data['cache-audio-file-and-play'])
+          },
+          'newLevelStarts': () => {
+             setStatus('')
+             setCountdown(data.countdown)
+             setLifes(data.lifes)
+             setRoomInfo(`${data.roomType} | Rule ${data.rule} Level ${data.level}`)
+             setPlayers(data.players)
+             setTeam(data.team || '')
+             setBookRoomUntil(formatDate(data.bookRoomUntil))
+          },
+          'offerNextLevel': () => {
+            setStatus(data.message)
+         },
+          'offerSameLevel': () => {
+            setStatus(data.message)
+         },
+          'playerSuccess': () => {
+             //playAudio(data['cache-audio-file-and-play'])
+          },
+          'playerFailed': () => console.log('playerFailed'),
+          'roomDisabled': () => setStatus(data.message),
+          'storedGameStates': () => {
+               const state = data.data
+               setPlayers(state.players)
+               setTeam(state.team)
+               setRoomInfo(`${state.roomType} | Rule ${state.rule} Level ${state.level}`)
+               setPrepTime(state.prepTime)
+               setCountdown(state.countdown)
+               setLifes(state.lifes)
+               setBookRoomUntil(state.book_room_until)
+          },
+          'timeIsUp': () => setStatus(data.message),
+          'updateCountdown': () => {
+             setCountdown(data.countdown)
+          },
+          'updateLifes': () => {
+             setLifes(data.lifes)
+             //playAudio(data['cache-audio-file-and-play'])
+          },
+          'updateLight': () => handleUpdateLight(data),
+          'updatePreparationInterval': () => {
+             setPrepTime(data.countdown)
+             //if (data['cache-audio-file']) preloadAudio(data['cache-audio-file'])
+             
+             //if (data['play-audio-file']) playAudio(data['play-audio-file'])
+          }
+      }
+
+      if (!messageHandlers[data.type]) {console.warn(`No handler for this message type ${data.type}`)}
+
+       messageHandlers[data.type]()
+    }
+
+    useEffect(() => {
+      document.title = 'GRA | Monitor'
+      
+      if (!wsService.current) {
+        wsService.current = new WebSocketService(WS_URL, CLIENT)
+        wsService.current.connect()
+      }
+
+      wsService.current.addListener(handleWebSocketMessage)
+
+      return () => {
+        if (wsService.current) {
+          wsService.current.removeListener(handleWebSocketMessage)
+          wsService.current.close()
+          wsService.current = null
+        }
+      }
+    }, [])
+
+    const formatTime = (seconds) => { 
+      const minutes = Math.floor(seconds / 60)
+      const remainingSeconds = seconds % 60
+
+      return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
+    }
+
+    const formatDate = (isoString) => {
+      if (!isoString) return 'No booking information'
+
+      const date = new Date(isoString)
+      return date.toLocaleString('en-US', {
+         month: 'long',
+         day: 'numeric',
+         year: 'numeric',
+         hour: 'numeric',
+         minute: 'numeric',
+         hour12: true
+      })
+    }
 
     const preloadAudio = async (audioName) => {
       if (audioCache.current.has(audioName)) return   // Already cached
@@ -78,15 +202,20 @@ const Monitor = () => {
             })
       })
     }
-    
-    const prefetchImages = (players) => {
-      players.forEach((player) => {
-         if (player.id) {
-            const img = new Image()
-            img.src = `https://greyzone-central-server-app.onrender.com/api/images/players/${player.id}.jpg`
-         }
-      })
-   }
+
+    const getPlayerImageUrl = async (playerId) => {
+      const facilityUrl = `https://localhost:3001/api/images/players/${playerId}.jpg`
+      const centralUrl = `https://greyzone-central-server-app.onrender.com/api/images/players/${playerId}.jpg`
+
+      try {
+         const response = await fetch(facilityUrl, { method: 'HEAD' })
+         if (response.ok) return facilityUrl
+      } catch (error) {
+         // If facility image is not available, fallback to central server
+      }
+
+      return centralUrl
+    }
 
     const handleCanvasClick = (ev) => {
       const canvas = canvasRef.current
@@ -199,14 +328,9 @@ const Monitor = () => {
       bufferedLightUpdates.current = []
     }
 
-    // WebSocket Types Methods
     const handleUpdateLight = (data) => {
       let light = data
-            
-      if (!lightsAreDrawn) {
-         bufferedLightUpdates.current.push(light)
-         return
-      }
+      bufferedLightUpdates.current.push(light)
 
       setLights((prevLights) => {
          if (!prevLights[light.lightId]) {
@@ -224,117 +348,6 @@ const Monitor = () => {
          return updatedLights
       })
     }
-
-    const handleWebSocketMessage = (data) => {
-      const messageHandlers = {
-         'bookRoomExpired': () => console.log(data),
-         'bookRoomWarning': () => console.log(data),
-          'colorNames': () => {
-             console.log(data)
-             //playAudio(data['cache-audio-file-and-play'])
-          },
-          'colorNamesEnd': () => {
-             console.log(data)
-             wsService.current.send({
-                type: 'colorNamesEnd'
-             })
-          },
-          'endAndExit': () => {
-            setPlayers([])
-            setTeam({})
-            setLifes(0)
-            setPrepTime(15)
-            setCountdown(0)
-            setStatus('')
-            setRoomInfo('')
-            setBookRoomUntil('')
-          },
-          'levelCompleted': () => {
-             console.log(data.message)
-             setStatus(data.message)
-             //playAudio(data['cache-audio-file-and-play'])
-          },
-          'levelFailed': () => {
-             console.log(data.message)
-             setStatus(data.message)
-             //playAudio(data['cache-audio-file-and-play'])
-             setTimeout(() => {
-                setStatus('')
-                setCountdown(0)
-                setLifes(0)
-             })
-          },
-          'newLevelStarts': () => {
-             setCountdown(data.countdown)
-             setLifes(data.lifes)
-             setRoomInfo(`${data.roomType} | Rule ${data.rule} Level ${data.level}`)
-             setPlayers(data.players)
-             setTeam(data.team || '')
-             setBookRoomUntil(formatDate(data.bookRoomUntil))
-
-             if (Array.isArray(data.players) && data.players.length > 0) {
-               prefetchImages(data.players)
-             }
-          },
-          'offerNextLevel': () => console.log(data.message),
-          'offerSameLevel': () => console.log(data.message),
-          'playerSuccess': () => {
-             //playAudio(data['cache-audio-file-and-play'])
-          },
-          'playerFailed': () => console.log('playerFailed'),
-          'roomDisabled': () => console.log(data.message),
-          'storedGameStates': () => {
-               const state = data.data
-               setPlayers(state.players)
-               setTeam(state.team)
-               setRoomInfo(`${state.roomType} | Rule ${state.rule} Level ${state.level}`)
-               setPrepTime(state.prepTime)
-               setCountdown(state.countdown)
-               setLifes(state.lifes)
-               setBookRoomUntil(state.book_room_until)
-          },
-          'timeIsUp': () => console.log(data.message),
-          'updateCountdown': () => {
-             setCountdown(data.countdown)
-          },
-          'updateLifes': () => {
-             setLifes(data.lifes)
-             //playAudio(data['cache-audio-file-and-play'])
-          },
-          'updateLight': () => handleUpdateLight(data),
-          'updatePreparationInterval': () => {
-             setPrepTime(data.countdown)
-             //if (data['cache-audio-file']) preloadAudio(data['cache-audio-file'])
-             
-             //if (data['play-audio-file']) playAudio(data['play-audio-file'])
-          }
-      }
-
-      if (!messageHandlers[data.type]) {console.warn(`No handler for this message type ${data.type}`)}
-
-       messageHandlers[data.type]()
-    }
-
-    useEffect(() => {
-      document.title = 'GRA | Monitor'
-      
-      if (!wsService.current) {
-        wsService.current = new WebSocketService(WS_URL, CLIENT)
-        wsService.current.connect()
-      }
-
-      wsService.current.addListener(handleWebSocketMessage)
-
-      wsService.current.send({ type: 'subscribe' })
-
-      return () => {
-        if (wsService.current) {
-          wsService.current.removeListener(handleWebSocketMessage)
-          wsService.current.close()
-          wsService.current = null
-        }
-      }
-    }, [])
 
     useEffect(() => {
       const canvas = canvasRef.current
@@ -355,7 +368,7 @@ const Monitor = () => {
 
       const fetchRoomData = async () => {
           try {
-              const response = await axios.get('http://localhost:3002/get/roomData')
+              const response = await axios.get('/get/roomData')
               
               if (response.status === 200 && response.data) {
                   setRoom(response.data.room)
@@ -376,8 +389,24 @@ const Monitor = () => {
     useEffect(() => {
       if (room && lights.length) {
           drawRoom(canvasRef.current.getContext('2d'))
+          applyBufferedLightUpdates()
       }
     }, [room, lights])
+
+    useEffect(() => {
+      const prefetchImages = async () => {
+         for (const player of players) {
+            if (player.id) {
+               const img = new Image()
+               img.src = await getPlayerImageUrl(player.id)
+            }
+         }
+      }
+
+      if (players.length > 0) {
+         prefetchImages()
+      }
+    }, [players])
 
     useEffect(() => {
       const interval = setInterval(() => {
@@ -386,29 +415,6 @@ const Monitor = () => {
 
       return () => clearInterval(interval)
     }, [])
-
-    const formatTime = (seconds) => { 
-      const minutes = Math.floor(seconds / 60)
-      const remainingSeconds = seconds % 60
-
-      return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
-    }
-
-    const formatDate = (isoString) => {
-      if (!isoString) return 'No booking information'
-
-      const date = new Date(isoString)
-      return date.toLocaleString('en-US', {
-         month: 'long',
-         day: 'numeric',
-         year: 'numeric',
-         hour: 'numeric',
-         minute: 'numeric',
-         hour12: true
-      })
-    }
-
-    const displayedTime = prepTime > 0 ? prepTime : countdown
 
     return (
       <div id="monitor" className="d-flex">
@@ -439,13 +445,6 @@ const Monitor = () => {
                      </span>
                   </div>
 
-                  {/* Game Status */}
-                  <div className="d-flex gap-2 align-items-center text-center">
-                     <span id="status" >
-                        {status}
-                     </span>
-                  </div>
-
                   {/* Lives */}
                   <div className="d-flex gap-2 align-items-center text-center">
                      <svg xmlns="http://www.w3.org/2000/svg" width="35" height="35" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -457,11 +456,17 @@ const Monitor = () => {
                </div>
             </div>
 
-            {/* Room Info */}
-            <div className="row justify-content-center w-100 text-white">
-               <small id="roomInfo" className='fs-6'>
+           
+            <div className="d-flex justify-content-between w-100 text-white">
+               {/* Room Info */}
+               <span id="roomInfo" className='fs-6'>
                   {roomInfo || "Room information not available"}
-               </small>
+               </span>
+
+               {/* Game Status */}
+               <span id="status" className="fs-6">
+                  {status}
+               </span>
             </div>
             
             {/* Book Room Until */}
@@ -470,39 +475,37 @@ const Monitor = () => {
                   {bookRoomUntil ? `Booked Until: ${bookRoomUntil}` : "No booking information"}
                </small>
             </div>
-
-            {/* Right Column */}
-            <div className="col-4 container py-2 text-white">
-               {/* Team Name */}
-               <h4 className='fs-6'>
-                  Team: {team?.name || "No team assigned"}
-               </h4>
-
-               {/* Players */}
-               <div className="w-100 d-flex flex-column">
-                  <ul id="current-players" className="list-unstyled">
-                     {Array.isArray(players) && players.length > 0 ? (
-                        players.map((player, index) => (
-                           <li key={index} className="d-flex align-items-center gap-2 mb-2">
-                              <img 
-                                 src={player.id ? `https://greyzone-central-server-app.onrender.com/api/images/players/${player.id}.jpg` : 'https://placehold.co/40x40?text=No+Image'}
-                                 alt={player.nick_name || 'Unknown'}
-                                 width="40"
-                                 height="40"
-                                 className="rounded-circle"
-                              />
-                              <span>{player.nick_name ?? 'Unknown'}</span>
-                           </li>
-                        ))
-                     ) : (
-                        <li>No players</li>
-                     )}
-                  </ul>
-               </div>
-            </div>
           </div>
-
         </div>
+         {/* Right Column */}
+         <div className="col-4 container py-2 text-white">
+            {/* Team Name */}
+            <h4 className='display-6'>
+               {team?.name || "No team assigned"}
+            </h4>
+
+            {/* Players */}
+            <div className="w-100 d-flex flex-column">
+               <ul id="room-players" className="fs-2 list-unstyled">
+                  {Array.isArray(players) && players.length > 0 ? (
+                     players.map((player, index) => (
+                        <li key={index} id="lists" className="list-item mb-2">
+                           <img 
+                              src={player.id ? `https://greyzone-central-server-app.onrender.com/api/images/players/${player.id}.jpg` : 'https://placehold.co/40x40?text=No+Image'}
+                              alt={player.nick_name || 'Unknown'}
+                              className="avatar"
+                           />
+                           <div className="d-flex flex-column align-items-start">
+                              <span>{player.nick_name ?? 'Unknown'}</span>
+                           </div>
+                        </li>
+                     ))
+                  ) : (
+                     <li>No players</li>
+                  )}
+               </ul>
+            </div>
+         </div>
       </div>
     )
 }

@@ -47,6 +47,7 @@ export default class Room {
 
         this.config = {}
         this.type = 'MonkeyRun'
+        this.numberOfLevels = 0
 
         this.init()
     }
@@ -57,11 +58,13 @@ export default class Room {
             const configData = await fs.promises.readFile(CONFIG_PATH, 'utf8')
             this.config = JSON.parse(configData)
             this.type = this.config.roomType || 'MonkeyRun'
+            this.numberOfLevels = this.config.gameLevels.length
             console.log(`Room initialized with type: ${this.type} \n`)
         } catch (error) {
             console.error(`Error loading config: ${error.message}`)
             this.config = {}
             this.type = 'MonkeyRun'
+            this.numberOfLevels = 0
         }
 
         await this.prepareLights()
@@ -275,10 +278,10 @@ export default class Room {
         return true
     }
 
-    async startGame(roomType, rule, level, players, team, book_room_until) {
+    async startGame(roomType, rule, level, players, team, book_room_until, is_collaborative) {
         //console.log('startGame request: ', { roomType, rule, level, players, team, book_room_until })
         if(this.isFree) {
-            this.currentGameSession = await this.gameManager.loadGame(roomType, rule, level, players, team, book_room_until, this)
+            this.currentGameSession = await this.gameManager.loadGame(this, roomType, rule, level, players, team, book_room_until, is_collaborative)
          
             if (this.currentGameSession) {
                this.currentGame = this.currentGameSession
