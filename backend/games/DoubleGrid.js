@@ -6,8 +6,8 @@ const blueGreen1 = hsvToRgb([130,220,255])
 const black = hsvToRgb([0,0,0])
 
 export default class DoubleGrid extends Game {
-    constructor (players, rule, level, team, book_room_until, env, roomInstance) {
-        super(players, rule, level, team, book_room_until, env, roomInstance, 60)
+    constructor (players, rule, level, team, book_room_until, env, roomInstance, timeForLevel = 60, timeToPrepare) {
+        super(players, rule, level, team, book_room_until, env, roomInstance, timeForLevel, timeToPrepare)
         this.running = false
       }
 
@@ -145,13 +145,13 @@ export default class DoubleGrid extends Game {
         this.lightIdsSequence.shift()
 
         if (this.lightIdsSequence.length === 0) {
-            this.level === 3 ? this.endGame() : this.levelCompleted()
+            this.levelCompleted()
         }
     }
 
     handleIncorrectButtonClick() {
         this.removeLife()
-        // this.broadcastFailure()
+        this.broadcastFailure()
     }
 
     createShape(clickedLight) {

@@ -19,7 +19,7 @@ const Monitor = () => {
 
     const canvasRef = useRef(null)
     const MAX_POINTS = 10
-    const REMOVE_INTERVAL = 2000
+    const REMOVE_INTERVAL = 1000
     const [clickPoints, setClickPoints] = useState([])
 
     const [room, setRoom] = useState(null)

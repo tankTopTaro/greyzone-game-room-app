@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename)
 
 dotenv.config()
 
-const GAME_ROOM_MAP = path.join(__dirname, '../configs/gameRoomMap.json')
+const GAME_ROOM_MAP = path.join(__dirname, '../configs/game-room-map.json')
 const HOSTNAME = process.env.HOSTNAME
 
 export default function gameRoomMapper () {
