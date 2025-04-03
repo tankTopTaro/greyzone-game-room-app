@@ -71,6 +71,7 @@ export default class Room {
         await this.measure()
         this.startServer()
         this.setupWebSocketListeners()
+        await this.notifyFacility()
     }
 
     setupWebSocketListeners() {
@@ -303,17 +304,18 @@ export default class Room {
     }
 
     async notifyFacility() {
-        const gra_id = os.hostname()
-        const apiURL = `http://localhost:3001/api/game-room/${gra_id}/available`
+      const gra_id = os.hostname()
+      console.log(`${gra_id} is notifying Facility...`)
+      const apiURL = `http://${process.env.GFA_HOSTNAME}:3001/api/game-room/${gra_id}/available`
 
-        try {
-            const response = await axios.post(apiURL, { available: this.isFree })
-            if (response.status === 200) {
-                console.log('Facility notified:', response.data)
-            }
-        } catch (error) {
-            console.error('Error notifying facility')
-        }
+      try {
+         const response = await axios.post(apiURL, { available: this.isFree })
+         if (response.status === 200) {
+               console.log('Facility notified:', response.data)
+         }
+      } catch (error) {
+         console.error('Error notifying facility', error.code)
+      }
     }
 
 }

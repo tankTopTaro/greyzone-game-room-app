@@ -21,7 +21,7 @@ const toggleRoomController = {
                 roomInstance.isFree = true
             }
             
-            res.json({ status: 'ok', enabled: roomInstance.enabled })
+            res.json({ enabled: roomInstance.enabled })
         } else {
             res.status(400).json({ error: 'Invalid status value'})
         }
