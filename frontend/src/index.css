@@ -119,7 +119,7 @@
    height: 100px;
  }
  
- .room-message-container {
+ #room-message-container {
    margin-bottom: 20px;
    color: var(--text-color);
  }

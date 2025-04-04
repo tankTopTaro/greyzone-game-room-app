@@ -184,7 +184,16 @@ export default class Room {
         this.server.use('/api/toggle-room', toggleRoomRoute)
         this.server.use('/api/game-audio', gameAudioRoute)
         this.server.use('/api/room-status', (req, res) => { res.json({enabled: this.enabled})})
-        this.server.get('/api/health', (req, res) => { res.json({status: 'ok', hostname: process.env.HOSTNAME}) }) 
+        this.server.get('/api/health', async(req, res) => { 
+            // console.log('Health check received');
+            try {
+               await this.notifyFacility()
+               // console.log('Facility notified successfully');
+            } catch (err) {
+               console.error('notifyFacility error:', err.message);
+            }
+            res.status(200).json({ status: 'ok' });
+        })  
 
         // Frontend routes
         this.server.get('/get/roomData', (req, res) => {
@@ -305,13 +314,13 @@ export default class Room {
 
     async notifyFacility() {
       const gra_id = os.hostname()
-      console.log(`${gra_id} is notifying Facility...`)
-      const apiURL = `http://${process.env.GFA_HOSTNAME}:3001/api/game-room/${gra_id}/available`
+      // console.log(`${gra_id} is notifying Facility...`)
+      const apiURL = `http://${process.env.GFA_HOSTNAME}:${process.env.GFA_PORT}/api/game-room/${gra_id}/available`
 
       try {
          const response = await axios.post(apiURL, { available: this.isFree })
          if (response.status === 200) {
-               console.log('Facility notified:', response.data)
+            // console.log('Facility notified:', response.data)
          }
       } catch (error) {
          console.error('Error notifying facility', error.code)

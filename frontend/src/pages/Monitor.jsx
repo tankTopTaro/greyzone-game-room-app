@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import axios from 'axios'
 import WebSocketService from "../utils/WebSocketService.js"
 
-const WS_URL = 'ws://localhost:8082'
+const WS_URL = 'ws://gra-1.local:8082'
 const CLIENT = 'monitor'
 
 const Monitor = () => {
@@ -26,6 +26,7 @@ const Monitor = () => {
     const [lights, setLights] = useState([])
     const [scale, setScale] = useState(1)
 
+    const MAX_BUFFERED_UPDATES = 50
     const bufferedLightUpdates = useRef([])
 
     const audioCache = useRef(new Map())
@@ -204,7 +205,7 @@ const Monitor = () => {
     }
 
     const getPlayerImageUrl = async (playerId) => {
-      const facilityUrl = `https://localhost:3001/api/images/players/${playerId}.jpg`
+      const facilityUrl = `https://192.168.254.100:3001/api/images/players/${playerId}.jpg`
       const centralUrl = `https://greyzone-central-server-app.onrender.com/api/images/players/${playerId}.jpg`
 
       try {
@@ -318,13 +319,15 @@ const Monitor = () => {
 
     const applyBufferedLightUpdates = () => {
       const ctx = canvasRef.current.getContext("2d")
+
       bufferedLightUpdates.current.forEach((lightUpdate) => {
-        const updatedLights = lights.map((light) =>
-          light.id === lightUpdate.lightId ? { ...light, color: lightUpdate.color } : light
-        )
-        setLights(updatedLights)
-        drawLight(ctx, updatedLights.find((l) => l.id === lightUpdate.lightId))
+         const updatedLights = lights.map((light) =>
+            light.id === lightUpdate.lightId ? { ...light, color: lightUpdate.color } : light
+         )
+         setLights(updatedLights)
+         drawLight(ctx, updatedLights.find((l) => l.id === lightUpdate.lightId))
       })
+      
       bufferedLightUpdates.current = []
     }
 
@@ -354,14 +357,14 @@ const Monitor = () => {
       const ctx = canvas.getContext('2d')
 
       const handleResize = () => {
-          if (!room) return
+         if (!room) return
 
-          canvas.width = window.innerWidth
-          setScale(canvas.width / room.width)
+         canvas.width = window.innerWidth
+         setScale(canvas.width / room.width)
 
-          canvas.height = room.height * scale
+         canvas.height = room.height * scale
 
-          drawRoom(ctx)
+         drawRoom(ctx)
       }
 
       window.addEventListener('resize', handleResize)

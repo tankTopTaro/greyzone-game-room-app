@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import axios from 'axios'
 import WebSocketService from '../utils/WebSocketService.js'
 
-const WS_URL = 'ws://localhost:8082'
+const WS_URL = 'ws://gra-1.local:8082'
 const CLIENT = 'room-screen'
 
 const Room = () => {
@@ -13,12 +13,14 @@ const Room = () => {
    const [lifes, setLifes] = useState(0)
    const [heartLoss, setHeartLoss] = useState(false)
    const [status, setStatus] = useState("")
+   const [statusType, setStatusType] = useState("")
    const [roomInfo, setRoomInfo] = useState("")
    const [roomType, setRoomType] = useState("")
    const [bookRoomUntil, setBookRoomUntil] = useState("")
    const [colors, setColors] = useState([])
    const [players, setPlayers] = useState([])
    const [team, setTeam] = useState({})
+
 
    const wsService = useRef(null)
 
@@ -40,8 +42,14 @@ const Room = () => {
    const handleWebSocketMessage = (data) => {
       console.log('Received data: ', data)
       const messageHandlers = {
-         'bookRoomExpired': () => setStatus(data.message),
-         'bookRoomWarning': () => setStatus(data.message),
+         'bookRoomExpired': () => {
+            setStatus(data.message)
+            setStatusType('room')
+         },
+         'bookRoomWarning': () => {
+            setStatus(data.message)
+            setStatusType('room')
+         },
          'colorNames': () => {
             playAudio(data['cache-audio-file-and-play'])
          },
@@ -62,6 +70,7 @@ const Room = () => {
             setRoomInfo('')
             setRoomType('')
             setBookRoomUntil('')
+            setStatusType('')
          },
          'levelCompleted': () => {
             setStatus(data.message)
@@ -80,9 +89,16 @@ const Room = () => {
             setTeam(data.team || '')
             setBookRoomUntil(formatDate(data.bookRoomUntil))
             setColors([])
+            setStatusType('')
          },
-         'offerNextLevel': () => setStatus(data.message),
-         'offerSameLevel': () => setStatus(data.message),
+         'offerNextLevel': () => {
+            setStatus(data.message)
+            setStatusType('player')
+         },
+         'offerSameLevel': () => {
+            setStatus(data.message)
+            setStatusType('player')
+         },
          'playerSuccess': () => {
             playAudio(data['cache-audio-file-and-play'])
             addColor(data.color)
@@ -208,7 +224,7 @@ const Room = () => {
    }
 
    const getPlayerImageUrl = async (playerId) => {
-      const facilityUrl = `https://localhost:3001/api/images/players/${playerId}.jpg`
+      const facilityUrl = `https://192.168.254.100:3001/api/images/players/${playerId}.jpg`
       const centralUrl = `https://greyzone-central-server-app.onrender.com/api/images/players/${playerId}.jpg`
 
       try {
@@ -259,7 +275,7 @@ const Room = () => {
 
   return (
    <div id="room" className="container d-flex flex-column align-items-center justify-content-center text-white">
-      <div id="hud-container" className="hud d-flex w-100 h-100 flex-column align-items-center justify-content-center text-white">
+      <div id="hud-container" className={`hud d-flex w-100 h-100 flex-column align-items-center justify-content-center text-white ${statusType ? 'd-none' : ''}`}>
             <div id="lifes-container" className="w-100 d-flex gap-2 align-items-center justify-content-center flex-grow-1">
                {Array.from({ length: lifes }, (_, index) => (
                   <div key={index} className={`heart ${heartLoss ? 'heart-lost' : ''}`}>
@@ -338,12 +354,12 @@ const Room = () => {
             </div>
       </div>  
       
-      <div id="player-message-container" className="w-100 h-100 d-none gap-2 align-items-center justify-content-center">
+      <div id="player-message-container" className={`w-100 h-100 gap-2 align-items-center justify-content-center ${statusType === 'player' ? 'd-flex' : 'd-none'}`}>
             <span id="player-message" className="fs-1">{status}</span>
       </div>
 
-      <div className="room-message-container w-100 h-100 d-none gap-2 align-items-center justify-content-center">
-            <span id="room-message" className="fs-1">Hello</span>
+      <div id="room-message-container" className={`w-100 h-100 gap-2 align-items-center justify-content-center ${statusType === 'room' ? 'd-flex' : 'd-none'}`}>
+            <span id="room-message" className="fs-1">{status}</span>
       </div>
    </div>
   )

@@ -101,6 +101,7 @@ export default class Game {
             light.onClick = 'ignore'
         })
         this.room.sendLightsInstructionsIfIdle()
+        this.clearGameStates()
     }
 
     prepareAndGreet() {
@@ -325,8 +326,8 @@ export default class Game {
       this.score = Math.max(1000 - (timeTaken * 2), 100)
 
       // Update team and player games_history
-      this.updateGamesHistory(this.team, levelKey, timeTaken)
-      this.players.forEach(player => this.updateGamesHistory(player, levelKey, timeTaken))
+      this.updateGamesHistory(this.team, levelKey, timeTaken, true)
+      this.players.forEach(player => this.updateGamesHistory(player, levelKey, timeTaken, true))
 
       this.isWon = true
 
@@ -355,6 +356,17 @@ export default class Game {
 
       const now = Date.now();
       const bookRoomTime = this.book_room_until ? new Date(this.book_room_until).getTime() : 0;
+
+      // Calculate the time taken to complete the level
+      const timeTaken = Math.round((now - this.lastLevelStartedAt) / 1000)
+      const levelKey = `${this.room.type} > ${this.rule} > L${this.level}`
+
+      // Calculate the score
+      this.score = Math.max(1000 - (timeTaken * 2), 100)
+
+      // Update team and player games_history
+      this.updateGamesHistory(this.team, levelKey, timeTaken, false)
+      this.players.forEach(player => this.updateGamesHistory(player, levelKey, timeTaken, false))
       
       const message = {
          type: 'levelFailed',
@@ -603,7 +615,6 @@ export default class Game {
 
     async endAndExit() {
       console.log('Game Ended...')
-      this.submitFinishedGameSession()
       this.room.socket.broadcastMessage('monitor', { type: 'endAndExit' })
       this.room.socket.broadcastMessage('room-screen', { type: 'endAndExit' })
       this.clearGameStates()
@@ -622,7 +633,7 @@ export default class Game {
          const timeLeft = bookRoomTime - now
          const warningTime = 3 * 60 * 1000 // 3-minutes before timeout
 
-         //console.log('BOOK_ROOM_UNTIL:', bookRoomTime, 'CURRENT_TIME:', now)
+         console.log('BOOK_ROOM_UNTIL:', bookRoomTime, 'CURRENT_TIME:', now)
 
          if (timeLeft <= 0) {
             clearInterval(this.bookRoomInterval)
@@ -681,10 +692,22 @@ export default class Game {
          book_room_until: this.book_room_until,
          countdown: this.countdown,
          lifes: this.lifes,
-         prepTime: this.prepTime
+         prepTime: this.prepTime,
+         score: this.score
       }
 
-      fs.writeFileSync(GAME_STATES_PATH, JSON.stringify(gameStates, null, 2), 'utf8')
+      try {
+         const dir = path.dirname(GAME_STATES_PATH)
+   
+         // Ensure the directory exists
+         if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true })
+         }
+   
+         fs.writeFileSync(GAME_STATES_PATH, JSON.stringify(gameStates, null, 2), 'utf8')
+      } catch (error) {
+         console.error('Failed to save game states:', error)
+      }
     }
 
     updateGameStates() {
@@ -696,6 +719,7 @@ export default class Game {
       gameStates.countdown = this.countdown
       gameStates.lifes = this.lifes
       gameStates.level = this.level
+      gameStates.score = this.score
 
       fs.writeFileSync(GAME_STATES_PATH, JSON.stringify(gameStates, null, 2), 'utf8')
     }
@@ -707,8 +731,14 @@ export default class Game {
       }
     }  
 
-    updateGamesHistory(entity, levelKey, timeTaken) {
+    updateGamesHistory(entity, levelKey, timeTaken, isCompleted) {
+      if (!entity || !entity.games_history) {
+         console.error("Invalid entity or games_history")
+         return
+      }
+
       if(!entity.games_history[levelKey]) {
+         // Initialize history if it doesn't exist
          entity.games_history[levelKey] = {
             best_time: timeTaken,
             played: 1,
@@ -717,19 +747,24 @@ export default class Game {
       } else {
          const history = entity.games_history[levelKey]
          const oldBestTime = history.best_time
-         history.best_time = history.best_time === 0 ? timeTaken : Math.min(history.best_time, timeTaken)
-         history.played += 1
 
-         // Log event if new record is set
-         if (history.best_time < oldBestTime) {
-            const entityType = entity === this.team ? "team" : "player"
+         if (isCompleted) {
+            // Update best time if new time is better
+            history.best_time = history.best_time === 0 ? timeTaken : Math.min(history.best_time, timeTaken)
 
-            this.gameLogEvent(
-               entity, 
-               `new_${entityType}_record`,
-               `New ${entityType} record on ${this.room.type} Level ${this.level}: ${history.best_time} seconds instead of ${oldBestTime}`
-            )
+            // Log event if new record is set
+            if (history.best_time < oldBestTime) {
+               const entityType = entity === this.team ? "team" : "player"
+
+               this.gameLogEvent(
+                  entity, 
+                  `new_${entityType}_record`,
+                  `New ${entityType} record on ${this.room.type} Level ${this.level}: ${history.best_time} seconds instead of ${oldBestTime}`
+               )
+            }
          }
+
+         history.played += 1
 
          // Reset played_today if its a new day
          const lastPlayedDate = new Date(this.createdAt).toDateString()
@@ -739,11 +774,21 @@ export default class Game {
     }
 
     gameLogEvent(entity, type, caption) {
+      if (!entity) {
+         console.error('Entity is null. Unable to log event')
+         return
+      }
+
       if(!entity.events_to_debrief) {
          entity.events_to_debrief = []
-      } else {
-         entity.events_to_debrief.push({type, caption})
       }
+
+      // if team is null, use player as fallback
+      if (entity === this.team || entity === null) {
+         entity = this.players[0]
+      }
+
+      entity.events_to_debrief.push({type, caption})
     }
 
     logEvent(event, details) {
@@ -758,16 +803,14 @@ export default class Game {
          gameRule: this.rule,
          gameLevel: this.level,
          durationStheory: this.timeForLevel,
-         durationSactual: this.team?.games_history?.best_time ?? this.players.flatMap(player => player.games_history.best_time || 0),
          isWon: this.isWon,
          score: this.score,
          isCollaborative: this.is_collaborative,
-         gameLog: this.team?.events_to_debrief ?? this.players.flatMap(player => player.events_to_debrief || []),
          log: this.log,
       };
    
       try {
-         const response = await axios.post('http://localhost:3001/api/game-sessions/', gameSessionData);
+         const response = await axios.post(`http://${process.env.GFA_HOSTNAME}:${process.env.GFA_PORT}/api/game-sessions`, gameSessionData);
    
          if (response.status === 200) {
             console.log('Game session uploaded successfully');
@@ -775,6 +818,6 @@ export default class Game {
       } catch (error) {
          console.error('Error uploading game session:', error.message);
       }
-   }
+    }
    
 }

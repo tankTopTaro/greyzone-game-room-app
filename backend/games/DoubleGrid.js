@@ -59,7 +59,7 @@ export default class DoubleGrid extends Game {
          this.updateCountdown()
          this.applyShapesOnLights()
          this.room.sendLightsInstructionsIfIdle()
-     } , 1000/25)
+     } , 1000/12)    // Lower frame rate (e.g. 15 FPS)
     }
 
     stop() {
