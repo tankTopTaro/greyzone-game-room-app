@@ -25,31 +25,35 @@ dotenv.config()
 
 export default class Room {
     constructor() {
-        this.socket = new Socket(8082)
-        this.gameManager = new GameManager()
-        this.currentGame = null // Track current game
+      this.socket = new Socket(8082)
+      this.gameManager = new GameManager()
+      this.currentGame = null // Track current game
 
-        this.enabled = true // Enabling/Disabling the Room
-        this._isFree = true  
-        this.currentGameSession = undefined
+      this.enabled = true // Enabling/Disabling the Room
+      this._isFree = true  
+      this.currentGameSession = undefined
 
-        this.width
-        this.height
+      this.width
+      this.height
 
-        this.lights = []
-        this.lightCounter = 0
-        this.lightGroups = {}
+      this.lights = []
+      this.lightCounter = 0
+      this.lightGroups = {}
 
-        this.sendLightsInstructionsIsBusy = false
-        this.sendLightsInstructionsRequestPending = false
+      this.sendLightsInstructionsIsBusy = false
+      this.sendLightsInstructionsRequestPending = false
 
-        this.created_at = Date.now()
+      // Throttling settings
+      this.lastMonitorUpdateAt = 0
+      this.monitorUpdateInterval = 100 // update monitor at most every 100ms (10 FPS) CHANGE THIS IF THE MACHINE IS POWERFUL ENOUGH TO HANDLE THE LOAD
 
-        this.config = {}
-        this.type = 'MonkeyRun'
-        this.numberOfLevels = 0
+      this.created_at = Date.now()
 
-        this.init()
+      this.config = {}
+      this.type = 'MonkeyRun'
+      this.numberOfLevels = 0
+
+      this.init()
     }
 
     async init() {
@@ -68,6 +72,7 @@ export default class Room {
         }
 
         await this.prepareLights()
+        console.log(`Total lights prepared: ${this.lights.length}`)
         await this.measure()
         this.startServer()
         this.setupWebSocketListeners()
@@ -217,40 +222,70 @@ export default class Room {
     }
 
     sendLightsInstructionsIfIdle(){
-        if(this.sendLightsInstructionsIsBusy){
-            if(this.sendLightsInstructionsRequestIsPending){
-                console.log('WARNING : Animation frame LOST ! (received sendLightsInstructionsIfIdle while sendLightsInstructionsRequestIsPending Already)')
-                return false
-            }
-            this.sendLightsInstructionsRequestIsPending = true
-            console.log('WARNING : Animation frame delayed (received sendLightsInstructionsIfIdle while sendLightsInstructionsIsBusy)')
-            return false
-        }
-        this.sendLightsInstructionsIsBusy = true
+      if(this.sendLightsInstructionsIsBusy){
+         if(this.sendLightsInstructionsRequestIsPending){
+               console.log('WARNING : Animation frame LOST ! (received sendLightsInstructionsIfIdle while sendLightsInstructionsRequestIsPending Already)')
+               return false
+         }
+         this.sendLightsInstructionsRequestIsPending = true
+         console.log('WARNING : Animation frame delayed (received sendLightsInstructionsIfIdle while sendLightsInstructionsIsBusy)')
+         return false
+      }
+      this.sendLightsInstructionsIsBusy = true
 
-        this.sendLightsInstructions()
+      this.sendLightsInstructions()
 
-        this.sendLightsInstructionsIsBusy = false
-        if(this.sendLightsInstructionsRequestIsPending){
-            this.sendLightsInstructionsRequestIsPending = false
-            this.sendLightsInstructionsIfIdle()
-            console.log('WARNING : doing another sendLightsInstructionsIfIdle in a row')
-            return true
-        }
-        return true
+      this.sendLightsInstructionsIsBusy = false
+      if(this.sendLightsInstructionsRequestIsPending){
+         this.sendLightsInstructionsRequestIsPending = false
+         this.sendLightsInstructionsIfIdle()
+         console.log('WARNING : doing another sendLightsInstructionsIfIdle in a row')
+         return true
+      }
+      return true
+
+/*       const now = Date.now()
+
+      if (now - this.lastSentAt < this.sendThrottleMs) {
+         return false
+      }
+
+      this.lastSentAt = now
+      this.sendLightsInstructions()
+      return true */
     }
 
     sendLightsInstructions(){
-        this.lights.forEach((light) => {
-            light.newInstructionString = JSON.stringify(light.color)
-            if(light.lastHardwareInstructionString !== light.newInstructionString){
-                this.sendHardwareInstruction(light)
-            }
-            if(light.lastSocketInstructionString !== light.newInstructionString){
-                this.sendSocketInstructionForMonitor(light)
-            }
+      /*this.lights.forEach((light) => {
+         light.newInstructionString = JSON.stringify(light.color)
 
-        })
+         if(light.lastHardwareInstructionString !== light.newInstructionString){
+               this.sendHardwareInstruction(light)
+         }
+
+         if(light.lastSocketInstructionString !== light.newInstructionString){
+               this.sendSocketInstructionForMonitor(light)
+         }
+      })*/
+
+      const now = Date.now()
+      const shouldUpdateMonitor = now - this.lastMonitorUpdateAt > this.monitorUpdateInterval
+
+      this.lights.forEach((light) => {
+         light.newInstructionString = JSON.stringify(light.color)
+
+         if(light.lastHardwareInstructionString !== light.newInstructionString){
+               this.sendHardwareInstruction(light)
+         }
+
+         if (shouldUpdateMonitor && light.lastSocketInstructionString !== light.newInstructionString) {
+            this.sendSocketInstructionForMonitor(light)
+         }
+      }) 
+
+      if (shouldUpdateMonitor) {
+         this.lastMonitorUpdateAt = Date.now()
+      }
     }
 
     async sendHardwareInstruction(light){

@@ -779,13 +779,13 @@ export default class Game {
          return
       }
 
-      if(!entity.events_to_debrief) {
-         entity.events_to_debrief = []
-      }
-
       // if team is null, use player as fallback
       if (entity === this.team || entity === null) {
          entity = this.players[0]
+      }
+
+      if(!entity.events_to_debrief) {
+         entity.events_to_debrief = []
       }
 
       entity.events_to_debrief.push({type, caption})

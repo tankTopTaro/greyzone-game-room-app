@@ -18,6 +18,7 @@ const Monitor = () => {
     const [team, setTeam] = useState({})
 
     const canvasRef = useRef(null)
+    const offscreenCanvasRef = useRef(document.createElement('canvas'))
     const MAX_POINTS = 10
     const REMOVE_INTERVAL = 1000
     const [clickPoints, setClickPoints] = useState([])
@@ -26,7 +27,6 @@ const Monitor = () => {
     const [lights, setLights] = useState([])
     const [scale, setScale] = useState(1)
 
-    const MAX_BUFFERED_UPDATES = 50
     const bufferedLightUpdates = useRef([])
 
     const audioCache = useRef(new Map())
@@ -277,21 +277,47 @@ const Monitor = () => {
       if (!room) return
 
       const canvas = canvasRef.current
-      canvas.width = window.innerWidth
-      setScale(canvas.width / room.width)
-      canvas.height = room.height * scale
+      const offscreenCanvas = offscreenCanvasRef.current
 
-      ctx.fillStyle = "rgb(43, 51, 55)"
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      if (!canvas || !offscreenCanvas) {
+         console.error('Canvas or offscreen canvas not available')
+         return
+      }
+
+      // Set size of both canvases
+      canvas.width = window.innerWidth
+      offscreenCanvas.width = canvas.width
+      setScale(canvas.width / room.width)
+
+      canvas.height = room.height * scale
+      offscreenCanvas.height = canvas.height
+
+      const offscreenCtx = offscreenCanvas.getContext('2d')
+
+      // Draw static content to the offscreen canvas
+      offscreenCtx.fillStyle = 'rgb(43, 51, 55'
+      offscreenCtx.fillRect(0, 0, offscreenCanvas.width, offscreenCanvas.height)
+
+      // ctx.fillStyle = "rgb(43, 51, 55)"
+      // ctx.fillRect(0, 0, canvas.width, canvas.height)
 
       lights.forEach((light) => {
         if (!light.color) {
           light.color = [0, 0, 0]
           light.onClick = "ignore"
         }
-        drawLight(ctx, light)
+        drawLight(offscreenCtx, light)
+        // drawLight(ctx, light)
       })
 
+      // Copy from offscreen canvas to the visible one
+      if (!ctx || !ctx.drawImage) {
+         console.error('Main canvas context or drawImage not available')
+      } else {
+         ctx.drawImage(offscreenCanvas, 0, 0)
+      }
+
+      // Draw dynamic click points on top
       clickPoints.forEach(({ x, y }) => {
          ctx.beginPath()
          ctx.arc(x, y, 10, 0, 2 * Math.PI)
@@ -319,14 +345,36 @@ const Monitor = () => {
 
     const applyBufferedLightUpdates = () => {
       const ctx = canvasRef.current.getContext("2d")
+      const offscreenCtx = offscreenCanvasRef.current.getContext('2d')
+
+      let updated = false
 
       bufferedLightUpdates.current.forEach((lightUpdate) => {
          const updatedLights = lights.map((light) =>
             light.id === lightUpdate.lightId ? { ...light, color: lightUpdate.color } : light
          )
          setLights(updatedLights)
-         drawLight(ctx, updatedLights.find((l) => l.id === lightUpdate.lightId))
+
+         const lightToUpdate = updatedLights.find((l) => l.id === lightUpdate.lightId)
+         if (lightToUpdate) {
+            drawLight(offscreenCtx, lightToUpdate)
+            updated = true
+         }
       })
+
+      if (updated) {
+         // Redraw full image with updated lights
+         ctx.drawImage(offscreenCanvasRef.current, 0, 0)
+
+         // Draw click highlights again
+         clickPoints.forEach(({ x, y }) => {
+            ctx.beginPath()
+            ctx.arc(x, y, 10, 0, 2 * Math.PI)
+            ctx.fillStyle = "rgba(255, 255, 0, 0.6)"
+            ctx.fill()
+            ctx.closePath()
+         })
+      }
       
       bufferedLightUpdates.current = []
     }
