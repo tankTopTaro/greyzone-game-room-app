@@ -188,17 +188,7 @@ export default class Room {
         this.server.use('/api/games-list', gamesListRoute)
         this.server.use('/api/toggle-room', toggleRoomRoute)
         this.server.use('/api/game-audio', gameAudioRoute)
-        this.server.use('/api/room-status', (req, res) => { res.json({enabled: this.enabled})})
-        this.server.get('/api/health', async(req, res) => { 
-            // console.log('Health check received');
-            try {
-               await this.notifyFacility()
-               // console.log('Facility notified successfully');
-            } catch (err) {
-               console.error('notifyFacility error:', err.message);
-            }
-            res.status(200).json({ status: 'ok' });
-        })  
+        this.server.get('/api/health', async(req, res) => { res.status(200).json({ status: 'ok' }) })  
 
         // Frontend routes
         this.server.get('/get/roomData', (req, res) => {
@@ -243,16 +233,6 @@ export default class Room {
          return true
       }
       return true
-
-/*       const now = Date.now()
-
-      if (now - this.lastSentAt < this.sendThrottleMs) {
-         return false
-      }
-
-      this.lastSentAt = now
-      this.sendLightsInstructions()
-      return true */
     }
 
     sendLightsInstructions(){
@@ -326,6 +306,8 @@ export default class Room {
     async startGame(roomType, rule, level, players, team, book_room_until, is_collaborative) {
         //console.log('startGame request: ', { roomType, rule, level, players, team, book_room_until })
         if(this.isFree) {
+            this.isFree = false
+            
             this.currentGameSession = await this.gameManager.loadGame(this, roomType, rule, level, players, team, book_room_until, is_collaborative)
          
             if (this.currentGameSession) {
@@ -340,10 +322,10 @@ export default class Room {
 
     set isFree(value) {
       if (this._isFree !== value) {
+
          this._isFree = value
-         if (value === true) {
-            this.notifyFacility()
-         }
+
+         this.notifyFacility()
       }
     }
 
@@ -353,12 +335,12 @@ export default class Room {
       const apiURL = `http://${process.env.GFA_HOSTNAME}:${process.env.GFA_PORT}/api/game-room/${gra_id}/available`
 
       try {
-         const response = await axios.post(apiURL, { available: this.isFree })
+         const response = await axios.post(apiURL, { available: this.isFree, enabled: this.enabled })
          if (response.status === 200) {
             // console.log('Facility notified:', response.data)
          }
       } catch (error) {
-         console.error('Error notifying facility', error.code)
+         console.error('Error notifying facility', error)
       }
     }
 

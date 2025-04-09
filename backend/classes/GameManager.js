@@ -16,26 +16,6 @@ export default class GameManager {
 
     async loadGame(roomInstance, roomType, rule, level, players, team, book_room_until, is_collaborative, timeToPrepare) {
         try {
-            console.log('PLAYERS:');
-            players.forEach(player => {
-               console.log({
-                  id: player.id,
-                  nick_name: player.nick_name,
-                  first_name: player.first_name,
-                  last_name: player.last_name,
-                  gender: player.gender,
-                  birth_date: player.birth_date,
-                  league: player.league,
-                  facility_session: player.facility_session,
-                  games_history: player.games_history
-               })
-            })
-            console.log('TEAM:', team)
-            console.log(`GAME INFO: ${roomType} > ${rule} > ${level}`)
-            console.log('BOOK ROOM UNTIL: ', book_room_until, ' DATE NOW: ', new Date().toISOString().replace('T', ' ').slice(0, 19))
-            console.log('IS COLLABORATIVE: ', is_collaborative)
-            console.log('TIME TO PREPARE: ', timeToPrepare)
-
             // get all available game files
             const availableGames = getAvailableGames()
 

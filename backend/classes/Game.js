@@ -1,6 +1,7 @@
 import path from 'path'
 import axios from 'axios'
 import fs from 'fs'
+import os from 'os'
 import { fileURLToPath } from 'url'
 
 import Shape from './Shape.js'
@@ -55,7 +56,6 @@ export default class Game {
         let result
         await this.prepareAndGreet()
             .then(() => {
-                this.room.isFree = false
                 this.start()
                 result = true
             })
@@ -311,15 +311,11 @@ export default class Game {
         })
     }
 
-    levelCompleted() {
+    async levelCompleted() {
       clearInterval(this.animationMetronome)
 
-      // Track book_room_until
-      const now = Date.now();
-      const bookRoomTime = this.book_room_until ? new Date(this.book_room_until).getTime() : 0;
-
       // Calculate the time taken to complete the level
-      const timeTaken = Math.round((now - this.lastLevelStartedAt) / 1000)
+      const timeTaken = Math.round((Date.now() - this.lastLevelStartedAt) / 1000)
       const levelKey = `${this.room.type} > ${this.rule} > L${this.level}`
 
       // Calculate the score
@@ -344,21 +340,16 @@ export default class Game {
       // Submit finished game session
       this.submitFinishedGameSession()
        
-      if (bookRoomTime > now) {
-         this.offerNextLevel()
-      } else {
-         this.endAndExit();
-      }
+      await this.checkAndHandleRoomTimeExpiration()
+
+      this.offerNextLevel()
     }
 
-    levelFailed() {
+    async levelFailed() {
       clearInterval(this.animationMetronome)
 
-      const now = Date.now();
-      const bookRoomTime = this.book_room_until ? new Date(this.book_room_until).getTime() : 0;
-
       // Calculate the time taken to complete the level
-      const timeTaken = Math.round((now - this.lastLevelStartedAt) / 1000)
+      const timeTaken = Math.round((Date.now() - this.lastLevelStartedAt) / 1000)
       const levelKey = `${this.room.type} > ${this.rule} > L${this.level}`
 
       // Calculate the score
@@ -380,12 +371,9 @@ export default class Game {
       // Submit the session even when the level fails
       this.submitFinishedGameSession()
 
-      if (bookRoomTime > now) {
-         this.offerSameLevel();
-      } else {
-         // Time is up, end the session
-         this.endAndExit();
-      }
+      await this.checkAndHandleRoomTimeExpiration()
+
+      this.offerSameLevel();
     }  
 
     offerSameLevel() {
@@ -620,6 +608,7 @@ export default class Game {
       this.clearGameStates()
       this.reset()
       this.room.isFree = true
+      this.room.currentGameSession = undefined
     }
 
     trackBookRoomTime() {
@@ -795,6 +784,85 @@ export default class Game {
       this.log.push({ event, details })
     }
 
+    async checkUpcomingGameSession() {
+      const gra_id = os.hostname()
+      try {
+         const response = await axios.get(`http://${process.env.GFA_HOSTNAME}:${process.env.GFA_PORT}/api/game-room/${gra_id}/is-upcoming-game-session`)
+         const data = response.data
+
+         if (response.status === 200) {
+            this.room.socket.broadcastMessage('monitor', {
+               type: 'isUpcomingGameSession',
+               is_upcoming: data.is_upcoming
+            })
+            return data.is_upcoming
+         } else {
+            console.error('Unexpected response:', response.status)
+            return false
+         }
+
+         
+      } catch (error) {
+         console.error('Error checking for upcoming game session:', error)
+         return false
+      }
+    }
+
+    async checkAndHandleRoomTimeExpiration() {
+      // Track book_room_until
+      const now = Date.now();
+      const bookRoomTime = this.book_room_until ? new Date(this.book_room_until).getTime() : 0;
+
+      const isUpcoming = await this.checkUpcomingGameSession()
+
+      await this.checkExpiredFacilitySessions()
+
+      if (bookRoomTime <= now) {    // Room time has expired
+         if (isUpcoming) {
+            this.endAndExit() 
+         } else {
+            this.endAndExit()
+         }
+      } else if (isUpcoming) {    // Room time has NOT expired but there is an upcoming game session
+         this.room.socket.broadcastMessage('monitor', {
+            type: 'upcomingGameSession',
+            message: 'An upcoming game session is scheduled soon. Pleas be aware of the time remaining.'
+         })
+      }
+    }
+
+    async checkExpiredFacilitySessions() {
+      const now = Date.now()
+
+      // Flag to check if any player has expired session
+      let expiredPlayers = false;
+
+      // Loop through each player to check if their facility session is expired
+      this.players.forEach(player => {
+         const sessionEndTime = new Date(player.facility_session.date_end).getTime()
+
+         if (sessionEndTime <= now) {
+            expiredPlayers = true
+
+            // Notify player to leave the room
+            this.room.socket.broadcastMessage('monitor', {
+               type: 'facilitySessionExpired',
+               message: `Player ${player.nick_name}'s session has expired. You must exit the room.`
+            })
+
+            this.room.socket.broadcastMessage('room-screen', {
+               type: 'facilitySessionExpired',
+               message: `Player ${player.nick_name}'s session has expired. Please exit the room.`
+            })
+         }
+      })
+
+      // If any player's session has expired, end the game for all players
+      if (expiredPlayers) {
+         this.endAndExit()
+      }
+    }
+
     async submitFinishedGameSession() {
       const gameSessionData = {
          players: this.players,
@@ -819,5 +887,4 @@ export default class Game {
          console.error('Error uploading game session:', error.message);
       }
     }
-   
 }
