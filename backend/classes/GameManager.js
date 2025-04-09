@@ -30,7 +30,7 @@ export default class GameManager {
 
             const { default: GameClass } = await import(`file://${gamePath}`)
 
-            const gameInstance = new GameClass(rule, level, players, team, book_room_until, is_collaborative, roomInstance, undefined, timeToPrepare)
+            const gameInstance = new GameClass(roomInstance, rule, level, players, team, book_room_until, is_collaborative, undefined, timeToPrepare)
 
             const result = await gameInstance.init()
 

@@ -18,7 +18,7 @@ const green = hsvToRgb([85,255,255])
 const red = hsvToRgb([0,255,255])
 
 export default class Game {
-    constructor(rule, level, players = [], team, book_room_until, is_collaborative = true, roomInstance, timeForLevel = 60, timeToPrepare) {
+    constructor(roomInstance, rule, level, players = [], team, book_room_until, is_collaborative = true, timeForLevel = 60, timeToPrepare) {
       this.players = players
       this.rule = rule
       this.level = level
@@ -417,6 +417,7 @@ export default class Game {
 
     async startSameLevel() {
       this.reset()
+      this.room.isFree = false
       this.isChoiceButtonPressed = false
 
       this.gameLogEvent( this.team, 'start_same_level', `Team replay level ${this.level}`)
@@ -614,6 +615,8 @@ export default class Game {
     trackBookRoomTime() {
       if (this.bookRoomInterval) clearInterval(this.bookRoomInterval)
 
+      let lastWarningSentAt = Date.now()
+
       this.bookRoomInterval = setInterval(() => {
          if(!this.book_room_until) return
 
@@ -621,8 +624,7 @@ export default class Game {
          const bookRoomTime = new Date(this.book_room_until).getTime()
          const timeLeft = bookRoomTime - now
          const warningTime = 3 * 60 * 1000 // 3-minutes before timeout
-
-         console.log('BOOK_ROOM_UNTIL:', bookRoomTime, 'CURRENT_TIME:', now)
+         const minuteInMillis = 60 * 1000
 
          if (timeLeft <= 0) {
             clearInterval(this.bookRoomInterval)
@@ -635,23 +637,39 @@ export default class Game {
             this.room.socket.broadcastMessage('monitor', message)
             this.room.socket.broadcastMessage('room-screen', message)
 
-            this.endAndExit()
+            this.endAndExit()    // End the session and notify everyone
          } else if (timeLeft <= warningTime) {
-            const message = {
-               type: 'bookRoomWarning',
-               message: `Time is almost up! You have ${Math.ceil(timeLeft / 60000)} minutes lefts.`
-            }
+            // Send warning once every minute within the last 3 minutes
+            if (now - lastWarningSentAt >= minuteInMillis) {
+               const message = {
+                   type: 'bookRoomWarning',
+                   message: `Time is almost up! You have ${Math.ceil(timeLeft / 60000)} minutes left.`,
+               };
 
-            this.room.socket.broadcastMessage('monitor', message)
-            this.room.socket.broadcastMessage('room-screen', message)
+               this.room.socket.broadcastMessage('monitor', message);
+               this.room.socket.broadcastMessage('room-screen', message);
+
+               lastWarningSentAt = now; // Update the last warning time
+           }
          }
-      }, 30 * 1000)  // Every 30 seconds
+
+         // Send the countdown to the frontend for display
+         const remainingMinutes = Math.floor(timeLeft / 60000);
+         const remainingSeconds = Math.floor((timeLeft % 60000) / 1000);
+         
+         const countdownMessage = {
+            type: 'bookRoomCountdown',
+            remainingTime: `${remainingMinutes}:${remainingSeconds.toString().padStart(2, '0')}`,
+         };
+
+         this.room.socket.broadcastMessage('monitor', countdownMessage);
+         this.room.socket.broadcastMessage('room-screen', countdownMessage);
+         
+      }, 1000)  // Every 30 seconds
     }
 
     startChoiceButtons(color) {
       if (this.isWaitingForChoiceButton) {
-
-         this.reset()
 
          this.room.lightGroups.wallButtons[0].color = color
          this.room.lightGroups.wallButtons[1].color = red 
@@ -789,19 +807,23 @@ export default class Game {
       try {
          const response = await axios.get(`http://${process.env.GFA_HOSTNAME}:${process.env.GFA_PORT}/api/game-room/${gra_id}/is-upcoming-game-session`)
          const data = response.data
-
+   
          if (response.status === 200) {
-            this.room.socket.broadcastMessage('monitor', {
-               type: 'isUpcomingGameSession',
-               is_upcoming: data.is_upcoming
-            })
-            return data.is_upcoming
+            // Assuming data is an object with the is_upcoming flag
+            if (typeof data.is_upcoming === 'boolean') {
+               this.room.socket.broadcastMessage('monitor', {
+                  type: 'isUpcomingGameSession',
+                  is_upcoming: data.is_upcoming
+               })
+               return data.is_upcoming
+            } else {
+               console.error('Invalid data structure:', data)
+               return false
+            }
          } else {
-            console.error('Unexpected response:', response.status)
+            console.error('Unexpected response status:', response.status)
             return false
          }
-
-         
       } catch (error) {
          console.error('Error checking for upcoming game session:', error)
          return false
