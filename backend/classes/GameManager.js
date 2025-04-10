@@ -16,6 +16,9 @@ export default class GameManager {
 
     async loadGame(roomInstance, roomType, rule, level, players, team, book_room_until, is_collaborative, timeToPrepare) {
         try {
+            console.log('BOOK_ROOM_UNTIL: ', book_room_until)
+            console.log('DATE_NOW:', Date.now())
+            
             // get all available game files
             const availableGames = getAvailableGames()
 

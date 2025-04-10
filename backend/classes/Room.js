@@ -9,6 +9,7 @@ import os from 'os'
 import Socket from '../classes/Socket.js'
 import GameManager from './GameManager.js'
 import Light from './Light.js'
+import { handleUncaughtException } from '../utils/utils.js'
 
 import startGameSessionRoute from '../routes/startGameSession.js'
 import gamesListRoute from '../routes/gamesList.js'
@@ -20,6 +21,8 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const CONFIG_PATH = path.join(__dirname, '../config/game-config.json')
+
+process.on('uncaughtException', handleUncaughtException)
 
 dotenv.config()
 
@@ -69,6 +72,7 @@ export default class Room {
             this.config = {}
             this.type = 'MonkeyRun'
             this.numberOfLevels = 0
+            throw new Error(`Failed to load configuration from ${CONFIG_PATH}`)
         }
 
         await this.prepareLights()
@@ -82,15 +86,15 @@ export default class Room {
     setupWebSocketListeners() {
       this.socket.onClientMessage('monitor', (message) => {
          try {
-               const data = JSON.parse(message)
-               //console.log('Received message from monitor:', data)
+            const data = JSON.parse(message)
+            //console.log('Received message from monitor:', data)
 
-               if (data.type === 'lightClickAction') {
-                  //console.log(`Light ID: ${data.lightId} | WhileColorWas: ${data.whileColorWas}`)
-                  this.currentGameSession.handleLightClickAction(parseInt(data.lightId, 10), data.whileColorWas)
-               }
+            if (data.type === 'lightClickAction') {
+               //console.log(`Light ID: ${data.lightId} | WhileColorWas: ${data.whileColorWas}`)
+               this.currentGameSession.handleLightClickAction(parseInt(data.lightId, 10), data.whileColorWas)
+            }
          } catch (error) {
-               console.error('Error parsing WebSocket message:', error)
+            console.error('Error parsing WebSocket message:', error)
          }
       })
     }
@@ -121,6 +125,7 @@ export default class Room {
             // console.log(`Loaded ${matrices.length} light configurations for type: ${this.type}`)
         } catch (error) {
             console.error(`Error loading lights config: ${error.message}`)
+            throw new Error(`Error loading lights config: ${error.message}`)
         }
     }    
 
@@ -214,8 +219,8 @@ export default class Room {
     sendLightsInstructionsIfIdle(){
       if(this.sendLightsInstructionsIsBusy){
          if(this.sendLightsInstructionsRequestIsPending){
-               console.log('WARNING : Animation frame LOST ! (received sendLightsInstructionsIfIdle while sendLightsInstructionsRequestIsPending Already)')
-               return false
+            console.log('WARNING : Animation frame LOST ! (received sendLightsInstructionsIfIdle while sendLightsInstructionsRequestIsPending Already)')
+            throw new Error('WARNING : Animation frame LOST ! (received sendLightsInstructionsIfIdle while sendLightsInstructionsRequestIsPending Already)')
          }
          this.sendLightsInstructionsRequestIsPending = true
          console.log('WARNING : Animation frame delayed (received sendLightsInstructionsIfIdle while sendLightsInstructionsIsBusy)')
@@ -230,24 +235,29 @@ export default class Room {
          this.sendLightsInstructionsRequestIsPending = false
          this.sendLightsInstructionsIfIdle()
          console.log('WARNING : doing another sendLightsInstructionsIfIdle in a row')
-         return true
+         throw new Error('WARNING : doing another sendLightsInstructionsIfIdle in a row')
       }
       return true
     }
 
     sendLightsInstructions(){
-      /*this.lights.forEach((light) => {
-         light.newInstructionString = JSON.stringify(light.color)
+      // Use this if you need to immediately reflect changes to the monitor
+      // whenever light instructions change
+      //
+      // this.lights.forEach((light) => {
+      //    light.newInstructionString = JSON.stringify(light.color)
 
-         if(light.lastHardwareInstructionString !== light.newInstructionString){
-               this.sendHardwareInstruction(light)
-         }
+      //    if(light.lastHardwareInstructionString !== light.newInstructionString){
+      //          this.sendHardwareInstruction(light)
+      //    }
 
-         if(light.lastSocketInstructionString !== light.newInstructionString){
-               this.sendSocketInstructionForMonitor(light)
-         }
-      })*/
+      //    if(light.lastSocketInstructionString !== light.newInstructionString){
+      //          this.sendSocketInstructionForMonitor(light)
+      //    }
+      // })
 
+      // Use this if you want to avoid sending excessive updates to the monitor
+      //
       const now = Date.now()
       const shouldUpdateMonitor = now - this.lastMonitorUpdateAt > this.monitorUpdateInterval
 
@@ -276,6 +286,7 @@ export default class Room {
         }else{
             console.log('WARNING : sendToHardware FAILS ! for following light:')
             console.log(light)
+            throw new Error(`WARNING : sendToHardware FAILS ! for following light: ${light}`)
         }
     }
 
@@ -312,6 +323,8 @@ export default class Room {
          
             if (this.currentGameSession) {
                this.currentGame = this.currentGameSession
+            } else {
+               throw new Error('Failed to start game session')
             }
          }
     }
@@ -346,6 +359,7 @@ export default class Room {
          }
       } catch (error) {
          console.error('Error notifying facility', error)
+         throw new Error(`Error notifying facility`)
       }
     }
 

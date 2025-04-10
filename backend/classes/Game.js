@@ -136,7 +136,6 @@ export default class Game {
             this.lifes = 5
             this.prepTime = this.timeToPrepare
 
-            this.trackBookRoomTime()   // track book_room_until
             this.saveGameStates()
 
             const message = {
@@ -155,6 +154,8 @@ export default class Game {
             this.room.socket.broadcastMessage('room-screen', message)
 
             this.preparationIntervalStartedAt = Date.now()
+
+            this.trackBookRoomTime()
 
             this.preparationInterval = setInterval(async () => {
                this.updatePreparationInterval()
@@ -342,8 +343,6 @@ export default class Game {
       // Submit finished game session
       this.submitFinishedGameSession()
        
-      await this.checkAndHandleRoomTimeExpiration()
-
       this.offerNextLevel()
     }
 
@@ -373,9 +372,7 @@ export default class Game {
       // Submit the session even when the level fails
       this.submitFinishedGameSession()
 
-      await this.checkAndHandleRoomTimeExpiration()
-
-      this.offerSameLevel();
+      this.offerSameLevel()
     }  
 
     offerSameLevel() {
@@ -487,6 +484,45 @@ export default class Game {
       this.players.forEach(player => this.gameLogEvent(player, 'start_next_level', `Player advanced to level ${this.level}`))
     }
 
+    updatePreparationInterval() {
+      //console.log('TimeToPrepare:', this.timeToPrepare)
+      let timeLeft = Math.round((this.preparationIntervalStartedAt + (this.timeToPrepare * 1000) - Date.now()) / 1000)
+
+      if (timeLeft != this.prepTime) {
+         //console.log('TIMELEFT: ', timeLeft, 'PREPTIME: ', this.prepTime)
+         if (timeLeft >= 0) {
+            this.prepTime = timeLeft
+            this.updateGameStates()
+            if (this.prepTime === 15) {
+               const message = {
+                  type: 'updatePreparationInterval',
+                  'cache-audio-file': '321go'
+               }
+
+               this.room.socket.broadcastMessage('monitor', message)
+               this.room.socket.broadcastMessage('room-screen', message)
+            } else if (this.prepTime === 3) {
+               const message = {
+                  type: 'updatePreparationInterval', 
+                  countdown: this.prepTime,
+                  'play-audio-file': '321go'
+               }
+
+               this.room.socket.broadcastMessage('monitor', message)
+               this.room.socket.broadcastMessage('room-screen', message)
+            } else {
+               const message = {
+                  type: 'updatePreparationInterval',
+                  countdown: this.prepTime
+               }
+
+               this.room.socket.broadcastMessage('monitor', message)
+               this.room.socket.broadcastMessage('room-screen', message)
+            }
+         }
+      }
+    }
+
     updateCountdown() {
         if (this.status === undefined) return
 
@@ -549,45 +585,6 @@ export default class Game {
       }
     }
 
-    updatePreparationInterval() {
-      //console.log('TimeToPrepare:', this.timeToPrepare)
-      let timeLeft = Math.round((this.preparationIntervalStartedAt + (this.timeToPrepare * 1000) - Date.now()) / 1000)
-
-      if (timeLeft != this.prepTime) {
-         //console.log('TIMELEFT: ', timeLeft, 'PREPTIME: ', this.prepTime)
-         if (timeLeft >= 0) {
-            this.prepTime = timeLeft
-            this.updateGameStates()
-            if (this.prepTime === 15) {
-               const message = {
-                  type: 'updatePreparationInterval',
-                  'cache-audio-file': '321go'
-               }
-
-               this.room.socket.broadcastMessage('monitor', message)
-               this.room.socket.broadcastMessage('room-screen', message)
-            } else if (this.prepTime === 3) {
-               const message = {
-                  type: 'updatePreparationInterval', 
-                  countdown: this.prepTime,
-                  'play-audio-file': '321go'
-               }
-
-               this.room.socket.broadcastMessage('monitor', message)
-               this.room.socket.broadcastMessage('room-screen', message)
-            } else {
-               const message = {
-                  type: 'updatePreparationInterval',
-                  countdown: this.prepTime
-               }
-
-               this.room.socket.broadcastMessage('monitor', message)
-               this.room.socket.broadcastMessage('room-screen', message)
-            }
-         }
-      }
-    }
-
     start() {
       if (this.status === 'running') {
          console.warn('Game is already running. Ignoring start call.')
@@ -597,83 +594,12 @@ export default class Game {
       this.setupGame()
       this.gameStartedAt = Date.now()
 
-          // Simulate an uncaught exception for testing
-         setTimeout(() => {
-            throw new Error('Simulated uncaught exception in start method')
-         }, 100)
-
       this.status = 'running'
       console.log('Game Session started.')
     }
   
     setupGame() {
       console.log('Setting up game...')
-    }
-
-    async endAndExit() {
-      console.log('Game Ended...')
-      this.room.socket.broadcastMessage('monitor', { type: 'endAndExit' })
-      this.room.socket.broadcastMessage('room-screen', { type: 'endAndExit' })
-      this.clearGameStates()
-      this.reset()
-      this.room.isFree = true
-      this.room.currentGameSession = undefined
-    }
-
-    trackBookRoomTime() {
-      if (this.bookRoomInterval) clearInterval(this.bookRoomInterval)
-
-      let lastWarningSentAt = Date.now()
-
-      this.bookRoomInterval = setInterval(() => {
-         if(!this.book_room_until) return
-
-         const now = Date.now()
-         const bookRoomTime = new Date(this.book_room_until).getTime()
-         const timeLeft = bookRoomTime - now
-         const warningTime = 3 * 60 * 1000 // 3-minutes before timeout
-         const minuteInMillis = 60 * 1000
-
-         if (timeLeft <= 0) {
-            clearInterval(this.bookRoomInterval)
-
-            const message = {
-               type: 'bookRoomExpired',
-               message: 'Time is up! Please exit or extend your session.'
-            }
-
-            this.room.socket.broadcastMessage('monitor', message)
-            this.room.socket.broadcastMessage('room-screen', message)
-
-            this.endAndExit()    // End the session and notify everyone
-         } else if (timeLeft <= warningTime) {
-            // Send warning once every minute within the last 3 minutes
-            if (now - lastWarningSentAt >= minuteInMillis) {
-               const message = {
-                   type: 'bookRoomWarning',
-                   message: `Time is almost up! You have ${Math.ceil(timeLeft / 60000)} minutes left.`,
-               };
-
-               this.room.socket.broadcastMessage('monitor', message);
-               this.room.socket.broadcastMessage('room-screen', message);
-
-               lastWarningSentAt = now; // Update the last warning time
-           }
-         }
-
-         // Send the countdown to the frontend for display
-         const remainingMinutes = Math.floor(timeLeft / 60000);
-         const remainingSeconds = Math.floor((timeLeft % 60000) / 1000);
-         
-         const countdownMessage = {
-            type: 'bookRoomCountdown',
-            remainingTime: `${remainingMinutes}:${remainingSeconds.toString().padStart(2, '0')}`,
-         };
-
-         this.room.socket.broadcastMessage('monitor', countdownMessage);
-         this.room.socket.broadcastMessage('room-screen', countdownMessage);
-         
-      }, 1000)  // Every 30 seconds
     }
 
     startChoiceButtons(color) {
@@ -694,6 +620,164 @@ export default class Game {
          this.isChoiceButtonPressed = false
       }
     }
+
+    async endAndExit() {
+      console.log('Game Ended...')
+      this.room.socket.broadcastMessage('monitor', { type: 'endAndExit' })
+      this.room.socket.broadcastMessage('room-screen', { type: 'endAndExit' })
+      this.clearGameStates()
+      this.reset()
+      this.room.isFree = true
+      this.room.currentGameSession = undefined
+    }
+
+    // Session
+
+    trackBookRoomTime() {
+      if (this.bookRoomInterval) clearInterval(this.bookRoomInterval)
+
+      let warningSent = false
+
+      this.bookRoomInterval = setInterval(() => {
+         if(!this.book_room_until) return
+
+         const now = Date.now()
+         const bookRoomTime = new Date(this.book_room_until).getTime()
+         const timeLeft = bookRoomTime - now
+
+         this.checkExpiredFacilitySessions();
+
+         const threeMinutes = 3 * 60 * 1000 // 3-minutes before timeout
+         const oneSecond = 1000
+
+         if (timeLeft <= 0) {
+            clearInterval(this.bookRoomInterval)
+
+            if (!this.checkUpcomingGameSession) {
+               const message = {
+                  type: 'bookRoomExpired',
+                  message: 'Time is up! Please exit or extend your session.'
+               }
+   
+               this.room.socket.broadcastMessage('monitor', message)
+               this.room.socket.broadcastMessage('room-screen', message)
+            } else {
+               this.endAndExit()    // End the session and notify everyone
+            }
+         } else if (!warningSent && Math.abs(timeLeft - threeMinutes) <= oneSecond) {
+            // Send warning once at the 3-minute mark
+            const message = {
+               type: 'bookRoomWarning',
+               message: 'Time is almost up! You have 3 minutes left.',
+            }
+
+            this.room.socket.broadcastMessage('monitor', message)
+            this.room.socket.broadcastMessage('room-screen', message)
+
+            warningSent = true
+         }
+
+         // Send the countdown to the frontend for display
+         const remainingMinutes = Math.floor(timeLeft / 60000);
+         const remainingSeconds = Math.floor((timeLeft % 60000) / 1000);
+         
+         const countdownMessage = {
+            type: 'bookRoomCountdown',
+            remainingTime: `${remainingMinutes}:${remainingSeconds.toString().padStart(2, '0')}`,
+         };
+
+         this.room.socket.broadcastMessage('monitor', countdownMessage);
+         this.room.socket.broadcastMessage('room-screen', countdownMessage);
+         
+      }, 1000)  
+    }
+
+    async checkUpcomingGameSession() {
+      const gra_id = os.hostname()
+      try {
+         const response = await axios.get(`http://${process.env.GFA_HOSTNAME}:${process.env.GFA_PORT}/api/game-room/${gra_id}/is-upcoming-game-session`)
+         const data = response.data
+   
+         if (response.status === 200) {
+            // Assuming data is an object with the is_upcoming flag
+            if (typeof data.is_upcoming === 'boolean') {
+               this.room.socket.broadcastMessage('monitor', {
+                  type: 'isUpcomingGameSession',
+                  is_upcoming: data.is_upcoming
+               })
+               return data.is_upcoming
+            } else {
+               console.error('Invalid data structure:', data)
+               return false
+            }
+         } else {
+            console.error('Unexpected response status:', response.status)
+            return false
+         }
+      } catch (error) {
+         console.error('Error checking for upcoming game session:', error)
+         return false
+      }
+    }
+
+    async checkExpiredFacilitySessions() {
+      const now = Date.now()
+
+      // Flag to check if any player has expired session
+      let expiredPlayers = false;
+
+      // Loop through each player to check if their facility session is expired
+      this.players.forEach(player => {
+         const sessionEndTime = new Date(player.facility_session.date_end).getTime()
+
+         if (sessionEndTime <= now) {
+            expiredPlayers = true
+
+            // Notify player to leave the room
+            this.room.socket.broadcastMessage('monitor', {
+               type: 'facilitySessionExpired',
+               message: `Player ${player.nick_name}'s session has expired. You must exit the room.`
+            })
+
+            this.room.socket.broadcastMessage('room-screen', {
+               type: 'facilitySessionExpired',
+               message: `Player ${player.nick_name}'s session has expired. Please exit the room.`
+            })
+         }
+      })
+
+      // If any player's session has expired, end the game for all players
+      if (expiredPlayers) {
+         this.endAndExit()
+      }
+    }
+
+    async submitFinishedGameSession() {
+      const gameSessionData = {
+         players: this.players,
+         team: this.team,
+         roomType: this.room.type,
+         gameRule: this.rule,
+         gameLevel: this.level,
+         durationStheory: this.timeForLevel,
+         isWon: this.isWon,
+         score: this.score,
+         isCollaborative: this.is_collaborative,
+         log: this.log,
+      };
+   
+      try {
+         const response = await axios.post(`http://${process.env.GFA_HOSTNAME}:${process.env.GFA_PORT}/api/game-sessions`, gameSessionData);
+   
+         if (response.status === 200) {
+            console.log('Game session uploaded successfully');
+         }
+      } catch (error) {
+         console.error('Error uploading game session:', error.message);
+      }
+    }
+
+    // Data
 
     saveGameStates() {
       this.clearGameStates()
@@ -808,113 +892,5 @@ export default class Game {
 
     logEvent(event, details) {
       this.log.push({ event, details })
-    }
-
-    async checkUpcomingGameSession() {
-      const gra_id = os.hostname()
-      try {
-         const response = await axios.get(`http://${process.env.GFA_HOSTNAME}:${process.env.GFA_PORT}/api/game-room/${gra_id}/is-upcoming-game-session`)
-         const data = response.data
-   
-         if (response.status === 200) {
-            // Assuming data is an object with the is_upcoming flag
-            if (typeof data.is_upcoming === 'boolean') {
-               this.room.socket.broadcastMessage('monitor', {
-                  type: 'isUpcomingGameSession',
-                  is_upcoming: data.is_upcoming
-               })
-               return data.is_upcoming
-            } else {
-               console.error('Invalid data structure:', data)
-               return false
-            }
-         } else {
-            console.error('Unexpected response status:', response.status)
-            return false
-         }
-      } catch (error) {
-         console.error('Error checking for upcoming game session:', error)
-         return false
-      }
-    }
-
-    async checkAndHandleRoomTimeExpiration() {
-      // Track book_room_until
-      const now = Date.now();
-      const bookRoomTime = this.book_room_until ? new Date(this.book_room_until).getTime() : 0;
-
-      const isUpcoming = await this.checkUpcomingGameSession()
-
-      await this.checkExpiredFacilitySessions()
-
-      if (bookRoomTime <= now) {    // Room time has expired
-         if (isUpcoming) {
-            this.endAndExit() 
-         } else {
-            this.endAndExit()
-         }
-      } else if (isUpcoming) {    // Room time has NOT expired but there is an upcoming game session
-         this.room.socket.broadcastMessage('monitor', {
-            type: 'upcomingGameSession',
-            message: 'An upcoming game session is scheduled soon. Pleas be aware of the time remaining.'
-         })
-      }
-    }
-
-    async checkExpiredFacilitySessions() {
-      const now = Date.now()
-
-      // Flag to check if any player has expired session
-      let expiredPlayers = false;
-
-      // Loop through each player to check if their facility session is expired
-      this.players.forEach(player => {
-         const sessionEndTime = new Date(player.facility_session.date_end).getTime()
-
-         if (sessionEndTime <= now) {
-            expiredPlayers = true
-
-            // Notify player to leave the room
-            this.room.socket.broadcastMessage('monitor', {
-               type: 'facilitySessionExpired',
-               message: `Player ${player.nick_name}'s session has expired. You must exit the room.`
-            })
-
-            this.room.socket.broadcastMessage('room-screen', {
-               type: 'facilitySessionExpired',
-               message: `Player ${player.nick_name}'s session has expired. Please exit the room.`
-            })
-         }
-      })
-
-      // If any player's session has expired, end the game for all players
-      if (expiredPlayers) {
-         this.endAndExit()
-      }
-    }
-
-    async submitFinishedGameSession() {
-      const gameSessionData = {
-         players: this.players,
-         team: this.team,
-         roomType: this.room.type,
-         gameRule: this.rule,
-         gameLevel: this.level,
-         durationStheory: this.timeForLevel,
-         isWon: this.isWon,
-         score: this.score,
-         isCollaborative: this.is_collaborative,
-         log: this.log,
-      };
-   
-      try {
-         const response = await axios.post(`http://${process.env.GFA_HOSTNAME}:${process.env.GFA_PORT}/api/game-sessions`, gameSessionData);
-   
-         if (response.status === 200) {
-            console.log('Game session uploaded successfully');
-         }
-      } catch (error) {
-         console.error('Error uploading game session:', error.message);
-      }
     }
 }
