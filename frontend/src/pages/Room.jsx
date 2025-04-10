@@ -75,6 +75,7 @@ const Room = () => {
             setBookRoomUntil('')
             setStatusType('')
          },
+         'facilitySessionExpired': () => setStatus(data.message),
          'levelCompleted': () => {
             setStatus(data.message)
             playAudio(data['cache-audio-file-and-play'])

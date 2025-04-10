@@ -38,9 +38,19 @@ const Monitor = () => {
 
     const handleWebSocketMessage = (data) => {
       const messageHandlers = {
-         'bookRoomCountdown': () => setBookRoomCountdown(data.remainingTime),
-         'bookRoomExpired': () => console.log(data),
-         'bookRoomWarning': () => console.log(data),
+         'bookRoomCountdown': () => console.log(data.remainingTime),
+         'bookRoomExpired': () => {
+            setStatus(data.message)
+            setTimeout(() => {
+               setStatus('')
+            }, 2000)
+         },
+         'bookRoomWarning': () => () => {
+            setStatus(data.message)
+            setTimeout(() => {
+               setStatus('')
+            }, 2000)
+         },
           'colorNames': () => {
              console.log(data)
              //playAudio(data['cache-audio-file-and-play'])
@@ -62,6 +72,12 @@ const Monitor = () => {
             setBookRoomUntil('')
             setBookRoomCountdown('06:00')
           },
+          'facilitySessionExpired': () => {
+            setStatus(data.message)
+            setTimeout(() => {
+               setStatus('')
+            }, 2000)
+         },
           'isUpcomingGameSession': () => console.log(data),
           'levelCompleted': () => {
              setStatus(data.message)
