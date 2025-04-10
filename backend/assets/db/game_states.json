@@ -1,0 +1,35 @@
+{
+  "players": [
+    {
+      "id": "F1-1",
+      "nick_name": "Shadow",
+      "date_add": "2025-02-14",
+      "last_name": "Smith",
+      "first_name": "John",
+      "gender": "Male",
+      "birth_date": "1995-08-21T00:00:00.000Z",
+      "league": {
+        "country": "USA",
+        "city": "New York",
+        "district": "Manhattan",
+        "other": "University League"
+      },
+      "games_history": {},
+      "facility_session": {
+        "date_start": "2025-04-10T00:59:52.545Z",
+        "duration_m": 60,
+        "date_end": "2025-04-10T01:59:52.545Z"
+      },
+      "events_to_debrief": []
+    }
+  ],
+  "team": null,
+  "roomType": "doubleGrid",
+  "rule": "1",
+  "level": "1",
+  "book_room_until": "2025-04-10T01:06:24.978Z",
+  "countdown": 60,
+  "lifes": 5,
+  "prepTime": 0,
+  "score": 0
+}

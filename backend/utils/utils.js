@@ -1,10 +1,24 @@
-export function handleUncaughtException(error) {
-    console.error('Uncaught Exception:', error)
-    // TODO: reportErrorToCentral(e)
-    process.exit(1)
-}
+import os from "os"
+import axios from "axios"
+import dotenv from "dotenv"
 
-process.on('uncaughtException', handleUncaughtException)
+dotenv.config()
+
+export async function handleUncaughtException(error) {
+    console.error('Uncaught Exception:', error)
+    
+    try {
+      await axios.post(`http://${process.env.GFA_HOSTNAME}:${process.env.GFA_PORT}/api/report-error`, {
+         error: 'Uncaught Exception',
+         stack: error.stack,
+         source: os.hostname()
+      })
+    } catch (err) {
+      console.error('Failed to report error to central: ', err)
+    } finally {
+      process.exit(1)
+    }
+}
 
 export function hsvToRgb(colorHsv) {
     let h = colorHsv[0]

@@ -14,6 +14,7 @@ const Monitor = () => {
     const [status, setStatus] = useState("")
     const [roomInfo, setRoomInfo] = useState("")
     const [bookRoomUntil, setBookRoomUntil] = useState("")
+    const [bookRoomCountdown, setBookRoomCountdown] = useState("06:00")
     const [players, setPlayers] = useState([])
     const [team, setTeam] = useState({})
 
@@ -33,9 +34,11 @@ const Monitor = () => {
     const wsService = useRef(null)
 
     const displayedTime = prepTime > 0 ? prepTime : countdown
+    const [playerImageUrls, setPlayerImageUrls] = useState({})
 
     const handleWebSocketMessage = (data) => {
       const messageHandlers = {
+         'bookRoomCountdown': () => setBookRoomCountdown(data.remainingTime),
          'bookRoomExpired': () => console.log(data),
          'bookRoomWarning': () => console.log(data),
           'colorNames': () => {
@@ -57,7 +60,9 @@ const Monitor = () => {
             setStatus('')
             setRoomInfo('')
             setBookRoomUntil('')
+            setBookRoomCountdown('06:00')
           },
+          'isUpcomingGameSession': () => console.log(data),
           'levelCompleted': () => {
              setStatus(data.message)
              //playAudio(data['cache-audio-file-and-play'])
@@ -202,20 +207,6 @@ const Monitor = () => {
                reject(err)
             })
       })
-    }
-
-    const getPlayerImageUrl = async (playerId) => {
-      const facilityUrl = `https://192.168.254.100:3001/api/images/players/${playerId}.jpg`
-      const centralUrl = `https://greyzone-central-server-app.onrender.com/api/images/players/${playerId}.jpg`
-
-      try {
-         const response = await fetch(facilityUrl, { method: 'HEAD' })
-         if (response.ok) return facilityUrl
-      } catch (error) {
-         // If facility image is not available, fallback to central server
-      }
-
-      return centralUrl
     }
 
     const handleCanvasClick = (ev) => {
@@ -444,18 +435,35 @@ const Monitor = () => {
       }
     }, [room, lights])
 
-    useEffect(() => {
-      const prefetchImages = async () => {
-         for (const player of players) {
-            if (player.id) {
-               const img = new Image()
-               img.src = await getPlayerImageUrl(player.id)
-            }
-         }
+    
+   const getPlayerImageUrl = async (playerId) => {
+      const facilityUrl = `http://192.168.254.100:3001/api/images/players/${playerId}.jpg`
+      const centralUrl = `https://greyzone-central-server-app.onrender.com/api/images/players/${playerId}.jpg`
+
+      try {
+         const response = await fetch(facilityUrl, { method: 'HEAD' })
+         if (response.ok) return facilityUrl
+      } catch (error) {
+         // If facility image is not available, fallback to central server
       }
 
+      return centralUrl
+    }
+
+    useEffect(() => {
+      const prefetchImages = async () => {
+         const urls = {};
+         for (const player of players) {
+            if (player.id) {
+               const url = await getPlayerImageUrl(player.id);
+               urls[player.id] = url;
+            }
+         }
+         setPlayerImageUrls(urls);
+      };
+   
       if (players.length > 0) {
-         prefetchImages()
+         prefetchImages();
       }
     }, [players])
 
@@ -525,6 +533,9 @@ const Monitor = () => {
                <small id="bookRoomUntil" className='fs-6'>
                   {bookRoomUntil ? `Booked Until: ${bookRoomUntil}` : "No booking information"}
                </small>
+               <small id="bookRoomUntil" className='fs-6'>
+                  {bookRoomCountdown}
+               </small>
             </div>
           </div>
         </div>
@@ -542,7 +553,7 @@ const Monitor = () => {
                      players.map((player, index) => (
                         <li key={index} id="lists" className="list-item mb-2">
                            <img 
-                              src={player.id ? `https://greyzone-central-server-app.onrender.com/api/images/players/${player.id}.jpg` : 'https://placehold.co/40x40?text=No+Image'}
+                              src={playerImageUrls[player.id] || 'https://placehold.co/40x40?text=No+Image'}
                               alt={player.nick_name || 'Unknown'}
                               className="avatar"
                            />

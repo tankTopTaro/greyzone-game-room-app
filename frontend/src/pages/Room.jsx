@@ -17,6 +17,7 @@ const Room = () => {
    const [roomInfo, setRoomInfo] = useState("")
    const [roomType, setRoomType] = useState("")
    const [bookRoomUntil, setBookRoomUntil] = useState("")
+   const [bookRoomCountdown, setBookRoomCountdown] = useState("06:00")
    const [colors, setColors] = useState([])
    const [players, setPlayers] = useState([])
    const [team, setTeam] = useState({})
@@ -27,6 +28,7 @@ const Room = () => {
    const audioCache = useRef(new Map())
 
    const displayedTime = prepTime > 0 ? prepTime : countdown
+   const [playerImageUrls, setPlayerImageUrls] = useState({})
 
    const heartSVG = (<svg id="heart" xmlns="http://www.w3.org/2000/svg" width="35" height="35" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" className="icon icon-tabler icons-tabler-outline icon-tabler-heart">
                         <path stroke="none" d="M0 0h24v24H0z" fill="none" />
@@ -42,6 +44,7 @@ const Room = () => {
    const handleWebSocketMessage = (data) => {
       console.log('Received data: ', data)
       const messageHandlers = {
+         'bookRoomCountdown': () => setBookRoomCountdown(data.remainingTime),
          'bookRoomExpired': () => {
             setStatus(data.message)
             setStatusType('room')
@@ -260,16 +263,18 @@ const Room = () => {
 
    useEffect(() => {
       const prefetchImages = async () => {
+         const urls = {};
          for (const player of players) {
             if (player.id) {
-               const img = new Image()
-               img.src = await getPlayerImageUrl(player.id)
+               const url = await getPlayerImageUrl(player.id);
+               urls[player.id] = url;
             }
          }
-      }
-
+         setPlayerImageUrls(urls);
+      };
+   
       if (players.length > 0) {
-         prefetchImages()
+         prefetchImages();
       }
    }, [players])
 
@@ -323,7 +328,10 @@ const Room = () => {
             </div>
 
             <div className="w-100 d-flex flex-column gap-2 align-items-center justify-content-center flex-grow-1 mb-2">
-               <span id="room-info" className="fs-2">{roomInfo}</span>
+               <span id="room-info" className="fs-2 mb-2">{roomInfo}</span>
+               <small id="bookRoomUntil" className='fs-6'>
+                  {bookRoomCountdown}
+                </small>
             </div>
 
             <div className="w-100 d-flex flex-column gap-2 align-items-center justify-content-center flex-grow-1">
@@ -337,7 +345,7 @@ const Room = () => {
                         players.map((player, index) => (
                            <li key={index} id="lists" className="list-item mb-2">
                               <img 
-                                 src={player.id ? `https://greyzone-central-server-app.onrender.com/api/images/players/${player.id}.jpg` : 'https://placehold.co/40x40?text=No+Image'}
+                                 src={playerImageUrls[player.id] || 'https://placehold.co/40x40?text=No+Image'}
                                  alt={player.nick_name || 'Unknown'}
                                  className="avatar"
                               />

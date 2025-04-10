@@ -335,7 +335,12 @@ export default class Room {
       const apiURL = `http://${process.env.GFA_HOSTNAME}:${process.env.GFA_PORT}/api/game-room/${gra_id}/available`
 
       try {
-         const response = await axios.post(apiURL, { available: this.isFree, enabled: this.enabled })
+         const response = await axios.post(apiURL, { 
+            available: this.isFree, 
+            enabled: this.enabled,
+            room: this.type,
+            roomConfig: this.config
+         })
          if (response.status === 200) {
             // console.log('Facility notified:', response.data)
          }

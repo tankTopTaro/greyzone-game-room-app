@@ -5,7 +5,9 @@ import os from 'os'
 import { fileURLToPath } from 'url'
 
 import Shape from './Shape.js'
-import { hsvToRgb, areRectanglesIntersecting } from '../utils/utils.js'
+import { hsvToRgb, areRectanglesIntersecting, handleUncaughtException } from '../utils/utils.js'
+
+process.on('uncaughtException', handleUncaughtException)
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -594,6 +596,12 @@ export default class Game {
 
       this.setupGame()
       this.gameStartedAt = Date.now()
+
+          // Simulate an uncaught exception for testing
+         setTimeout(() => {
+            throw new Error('Simulated uncaught exception in start method')
+         }, 100)
+
       this.status = 'running'
       console.log('Game Session started.')
     }
