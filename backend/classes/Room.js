@@ -46,10 +46,6 @@ export default class Room {
       this.sendLightsInstructionsIsBusy = false
       this.sendLightsInstructionsRequestPending = false
 
-      // Throttling settings
-      this.lastMonitorUpdateAt = 0
-      this.monitorUpdateInterval = 100 // update monitor at most every 100ms (10 FPS) CHANGE THIS IF THE MACHINE IS POWERFUL ENOUGH TO HANDLE THE LOAD
-
       this.created_at = Date.now()
 
       this.config = {}
@@ -241,26 +237,6 @@ export default class Room {
     }
 
     sendLightsInstructions(){
-      // Use this if you need to immediately reflect changes to the monitor
-      // whenever light instructions change
-      //
-      // this.lights.forEach((light) => {
-      //    light.newInstructionString = JSON.stringify(light.color)
-
-      //    if(light.lastHardwareInstructionString !== light.newInstructionString){
-      //          this.sendHardwareInstruction(light)
-      //    }
-
-      //    if(light.lastSocketInstructionString !== light.newInstructionString){
-      //          this.sendSocketInstructionForMonitor(light)
-      //    }
-      // })
-
-      // Use this if you want to avoid sending excessive updates to the monitor
-      //
-      const now = Date.now()
-      const shouldUpdateMonitor = now - this.lastMonitorUpdateAt > this.monitorUpdateInterval
-
       this.lights.forEach((light) => {
          light.newInstructionString = JSON.stringify(light.color)
 
@@ -268,14 +244,10 @@ export default class Room {
                this.sendHardwareInstruction(light)
          }
 
-         if (shouldUpdateMonitor && light.lastSocketInstructionString !== light.newInstructionString) {
-            this.sendSocketInstructionForMonitor(light)
+         if(light.lastSocketInstructionString !== light.newInstructionString){
+               this.sendSocketInstructionForMonitor(light)
          }
-      }) 
-
-      if (shouldUpdateMonitor) {
-         this.lastMonitorUpdateAt = Date.now()
-      }
+      })
     }
 
     async sendHardwareInstruction(light){
