@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import axios from 'axios'
 import WebSocketService from '../utils/WebSocketService.js'
 
-const WS_URL = 'ws://gra-1.local:8082'
+const WS_URL = `ws://${window.location.hostname}:8082`
 const CLIENT = 'room-screen'
 
 const Room = () => {
@@ -44,7 +44,7 @@ const Room = () => {
    const handleWebSocketMessage = (data) => {
       console.log('Received data: ', data)
       const messageHandlers = {
-         'bookRoomCountdown': () => setBookRoomCountdown(data.remainingTime),
+         // 'bookRoomCountdown': () => setBookRoomCountdown(data.remainingTime),
          'bookRoomExpired': () => {
             setStatus(data.message)
             setStatusType('room')
@@ -330,9 +330,9 @@ const Room = () => {
 
             <div className="w-100 d-flex flex-column gap-2 align-items-center justify-content-center flex-grow-1 mb-2">
                <span id="room-info" className="fs-2 mb-2">{roomInfo}</span>
-               <small id="bookRoomUntil" className='fs-6'>
+               {/* <small id="bookRoomUntil" className='fs-6'>
                   {bookRoomCountdown}
-                </small>
+                </small> */}
             </div>
 
             <div className="w-100 d-flex flex-column gap-2 align-items-center justify-content-center flex-grow-1">
