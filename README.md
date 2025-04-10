@@ -51,7 +51,7 @@ To get started with the Greyzone Game Room App, follow these steps:
 
 ---
 ## Bugs and Issues
-1. **TBA** (To be added)
+1. Light animations in monitor screen might lag, I don't know if the reason is because of limited hardware specs of the Raspberry Pi or my network connection. The animations are working fine if you are using a powerful machine like a desktop or laptop. For now I've added a throttle to the `sendLightsInstructions()` method that limits the amount of updates that is sent to the frontend.
 
 ---
 ## Important Features
@@ -87,3 +87,6 @@ Here are some of the key features of the **Greyzone Game Room App:**
 
 5. **Game Modules**
    - Game modules must be placed inside the `games` directory. These modules are automatically detected by the system and can be loaded dynamically.
+
+6. **Uncaught Exceptions**
+   - Uncaught exceptions are now forwarded to the `Game Facility App`
