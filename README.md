@@ -11,7 +11,6 @@
 ## Mission
 This is an optimized and more scalable version of the Game Room App. We have streamlined the system by removing unnecessary components, leaving only the core features: monitor and room screens. Games are now modular, audios are fetched only on demand, and the ReportLightClickAction now utilizes WebSockets for more efficient communication.
 
-
 ---
 
 ## Technologies Used
